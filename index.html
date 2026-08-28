@@ -501,6 +501,7 @@ async function boot() {
     window.location.href = 'login.html';
     return;
   }
+  document.getElementById('app-root').style.display = 'flex';
   document.getElementById('current-user-label').textContent = localStorage.getItem(SESSION_USER_KEY) || '';
   if (localStorage.getItem(SESSION_ROLE_KEY) === 'admin') {
     document.getElementById('admin-tab').style.display = 'flex';
