@@ -15,6 +15,8 @@ const SHEET_LEDGER = 'Ledger';
 const SHEET_CATEGORIES = 'Categories';
 const SHEET_BUDGET = 'Budget';
 const SHEET_USERS = 'Users';
+const SHEET_EVENTS = 'Events';
+const SHEET_EVENT_ENTRIES = 'EventEntries';
 
 const LEDGER_HEADERS = [
   'ID', 'Date', 'Type', 'Category', 'SubCategory', 'Description',
@@ -23,6 +25,11 @@ const LEDGER_HEADERS = [
 const CATEGORY_HEADERS = ['Type', 'Category'];
 const BUDGET_HEADERS = ['Year', 'Category', 'BudgetedAmount'];
 const USER_HEADERS = ['Username', 'PasswordHash', 'Role', 'CreatedOn'];
+const EVENT_HEADERS = ['ID', 'Name', 'StartDate', 'EndDate', 'Status', 'CreatedOn'];
+const EVENT_ENTRY_HEADERS = [
+  'ID', 'EventID', 'Date', 'Type', 'Description', 'Amount',
+  'PaymentMode', 'Reference', 'EnteredOn'
+];
 
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
 
@@ -154,13 +161,25 @@ function doGet(e) {
       const users = sheetToObjects_(s).map(u => ({ Username: u.Username, Role: u.Role, CreatedOn: u.CreatedOn }));
       return jsonOut_({ ok: true, data: users });
     }
+    if (action === 'events') {
+      const s = getOrCreateSheet_(SHEET_EVENTS, EVENT_HEADERS);
+      return jsonOut_({ ok: true, data: sheetToObjects_(s) });
+    }
+    if (action === 'eventEntries') {
+      const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
+      const all = sheetToObjects_(s);
+      const entries = e.parameter.eventId ? all.filter(r => r.EventID === e.parameter.eventId) : all;
+      return jsonOut_({ ok: true, data: entries });
+    }
 
     // default: everything the dashboard needs in one call
+    const eventsSheet = getOrCreateSheet_(SHEET_EVENTS, EVENT_HEADERS);
     return jsonOut_({
       ok: true,
       ledger: sheetToObjects_(ledgerSheet),
       categories: sheetToObjects_(categorySheet),
-      budget: sheetToObjects_(budgetSheet)
+      budget: sheetToObjects_(budgetSheet),
+      events: sheetToObjects_(eventsSheet)
     });
   } catch (err) {
     return jsonOut_({ ok: false, error: err.message });
@@ -326,6 +345,78 @@ function doPost(e) {
       }
       if (!found) {
         s.appendRow([body.year, body.category, Number(body.amount)]);
+      }
+      return jsonOut_({ ok: true });
+    }
+
+    /* ---- Events module (fully separate from the main Ledger) ---- */
+
+    if (action === 'addEvent') {
+      if (!body.name) return jsonOut_({ ok: false, error: 'Event name is required.' });
+      const s = getOrCreateSheet_(SHEET_EVENTS, EVENT_HEADERS);
+      const id = Utilities.getUuid();
+      s.appendRow([id, body.name, body.startDate || '', body.endDate || '', 'Open', new Date()]);
+      return jsonOut_({ ok: true, id: id });
+    }
+
+    if (action === 'setEventStatus') {
+      const s = getOrCreateSheet_(SHEET_EVENTS, EVENT_HEADERS);
+      const values = s.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === body.id) {
+          s.getRange(i + 1, 5).setValue(body.status); // 'Open' or 'Closed'
+          return jsonOut_({ ok: true });
+        }
+      }
+      return jsonOut_({ ok: false, error: 'Event not found.' });
+    }
+
+    if (action === 'deleteEvent') {
+      requireAdmin_(body.token);
+      const s = getOrCreateSheet_(SHEET_EVENTS, EVENT_HEADERS);
+      const values = s.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === body.id) {
+          s.deleteRow(i + 1);
+          break;
+        }
+      }
+      // cascade: remove this event's entries too
+      const es = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
+      const evalues = es.getDataRange().getValues();
+      for (let i = evalues.length - 1; i >= 1; i--) {
+        if (evalues[i][1] === body.id) {
+          es.deleteRow(i + 1);
+        }
+      }
+      return jsonOut_({ ok: true });
+    }
+
+    if (action === 'addEventEntry') {
+      const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
+      const id = Utilities.getUuid();
+      s.appendRow([
+        id,
+        body.eventId,
+        body.date,
+        body.type, // 'Income' or 'Expense'
+        body.description || '',
+        Number(body.amount),
+        body.paymentMode || '',
+        body.reference || '',
+        new Date()
+      ]);
+      return jsonOut_({ ok: true, id: id });
+    }
+
+    if (action === 'deleteEventEntry') {
+      const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
+      const values = s.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === body.id) {
+          s.deleteRow(i + 1);
+          break;
+        }
       }
       return jsonOut_({ ok: true });
     }

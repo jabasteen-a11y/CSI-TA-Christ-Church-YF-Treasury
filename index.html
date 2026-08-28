@@ -167,6 +167,25 @@
     text-decoration:underline;text-underline-offset:2px;
   }
 
+  .event-card{
+    background:var(--white);border:1px solid var(--line);border-radius:2px;padding:16px 18px;
+    margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+    cursor:pointer;transition:border-color 0.15s;
+  }
+  .event-card:hover{border-color:var(--brass-soft);}
+  .event-card h3{font-family:'Fraunces',serif;font-size:1.05rem;margin:0 0 4px;font-weight:600;}
+  .event-card .sub{font-size:0.8rem;}
+  .event-card .amounts{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:0.85rem;}
+
+  @media print{
+    .spine, .page-head .balance-card, #event-entry-panel, .no-print, .logout-link,
+    #event-back-btn, #event-toggle-status-btn, #event-print-btn, #current-user-label { display:none !important; }
+    .app{display:block;}
+    .main{padding:0;max-width:100%;}
+    body{background:#fff;}
+    .panel{border:none;box-shadow:none;padding:8px 0;}
+  }
+
   @media (max-width:800px){
     .app{flex-direction:column;}
     .spine{width:100%;flex-direction:row;overflow-x:auto;padding:10px;}
@@ -186,7 +205,8 @@
     <div class="tab" data-tab="categories"><span class="idx">02</span> Categories</div>
     <div class="tab" data-tab="budget"><span class="idx">03</span> Budget</div>
     <div class="tab" data-tab="reports"><span class="idx">04</span> Reports</div>
-    <div class="tab" data-tab="admin" id="admin-tab" style="display:none;"><span class="idx">05</span> Users</div>
+    <div class="tab" data-tab="events"><span class="idx">05</span> Events</div>
+    <div class="tab" data-tab="admin" id="admin-tab" style="display:none;"><span class="idx">06</span> Users</div>
     <div style="flex:1;"></div>
     <div style="padding:0 22px 4px;font-size:0.72rem;color:rgba(255,255,255,0.6);" id="current-user-label"></div>
     <div class="logout-link" id="logout-btn" style="padding:0 22px 6px;">Log out</div>
@@ -382,6 +402,123 @@
       </div>
     </section>
 
+    <!-- ================= EVENTS (separate mini-ledgers) ================= -->
+    <section id="tab-events">
+
+      <!-- Events list view -->
+      <div id="events-list-view">
+        <div class="panel">
+          <h2>New Event</h2>
+          <form id="event-form">
+            <div class="form-grid">
+              <div style="grid-column:1/-1;">
+                <label>Event Name</label>
+                <input type="text" id="ev-name" placeholder="e.g. Youth Breakfast 2026" required>
+              </div>
+              <div>
+                <label>Start Date</label>
+                <input type="date" id="ev-start">
+              </div>
+              <div>
+                <label>End Date</label>
+                <input type="date" id="ev-end">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn">Create Event</button>
+              <span class="status-msg" id="event-status"></span>
+            </div>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Events</h2>
+          <div id="events-cards"></div>
+        </div>
+      </div>
+
+      <!-- Single event detail view -->
+      <div id="event-detail-view" style="display:none;">
+        <div class="panel" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <button class="btn secondary" id="event-back-btn" type="button">&larr; All Events</button>
+            <h2 style="display:inline-block;margin:0 0 0 14px;" id="event-detail-title">Event</h2>
+            <div class="sub" id="event-detail-dates" style="margin-top:4px;"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="tag" id="event-status-tag"></span>
+            <button class="btn secondary" id="event-toggle-status-btn" type="button"></button>
+            <button class="btn secondary" id="event-print-btn" type="button">Print Statement</button>
+          </div>
+        </div>
+
+        <div class="report-grid" style="margin-bottom:20px;">
+          <div class="stat-card"><div class="label">Sponsor Income</div><div class="val income" id="ev-stat-income">₹ 0</div></div>
+          <div class="stat-card"><div class="label">Expenses</div><div class="val expense" id="ev-stat-expense">₹ 0</div></div>
+          <div class="stat-card"><div class="label">Net</div><div class="val" id="ev-stat-net">₹ 0</div></div>
+        </div>
+
+        <div class="panel" id="event-entry-panel">
+          <h2>Add Entry</h2>
+          <form id="event-entry-form">
+            <div class="form-grid">
+              <div>
+                <label>Date</label>
+                <input type="date" id="ee-date" required>
+              </div>
+              <div>
+                <label>Type</label>
+                <select id="ee-type" required>
+                  <option value="Income">Income (Sponsor)</option>
+                  <option value="Expense">Expense</option>
+                </select>
+              </div>
+              <div>
+                <label>Payment Mode</label>
+                <select id="ee-mode">
+                  <option>Cash</option>
+                  <option>UPI</option>
+                  <option>Cheque</option>
+                  <option>Bank Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label>Amount (₹)</label>
+                <input type="number" id="ee-amount" min="0" step="0.01" required>
+              </div>
+              <div>
+                <label>Reference No.</label>
+                <input type="text" id="ee-reference" placeholder="optional">
+              </div>
+              <div style="grid-column:1/-1;">
+                <label>Description</label>
+                <input type="text" id="ee-description" placeholder="e.g. Sponsor: John Mathew, or Item: Bread &amp; eggs">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn">Add Entry</button>
+              <span class="status-msg" id="event-entry-status"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h2>Entries</h2>
+          <div class="ledger-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Type</th><th>Description</th><th>Mode</th><th class="num">Amount</th><th class="no-print"></th></tr>
+              </thead>
+              <tbody id="event-entries-body"></tbody>
+            </table>
+            <div class="empty-state" id="event-entries-empty" style="display:none;">
+              <div class="big">No entries yet</div>
+              Add sponsor income or expenses above.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ================= ADMIN / USERS ================= -->
     <section id="tab-admin">
       <div class="panel">
@@ -448,7 +585,7 @@ const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzuDtVWlm1zl_9os_ovMgflRTnAAGE0aPblPXM-oQQVYDNqqFQqNd-senTOTa3LozxM/exec'
 };
 
-let STATE = { ledger: [], categories: [], budget: [] };
+let STATE = { ledger: [], categories: [], budget: [], events: [] };
 
 /* ---------- Session (login happens on login.html, not here) ---------- */
 const SESSION_TOKEN_KEY = 'csita_treasury_token';
@@ -471,9 +608,15 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
 });
 
 /* ---------- API helpers ---------- */
-async function apiGet(action) {
+async function apiGet(action, extraParams) {
   const token = encodeURIComponent(getToken() || '');
-  const res = await fetch(`${CONFIG.API_URL}?action=${action}&token=${token}`);
+  let url = `${CONFIG.API_URL}?action=${action}&token=${token}`;
+  if (extraParams) {
+    for (const key in extraParams) {
+      url += `&${key}=${encodeURIComponent(extraParams[key])}`;
+    }
+  }
+  const res = await fetch(url);
   return res.json();
 }
 async function apiPost(payload) {
@@ -516,6 +659,7 @@ async function loadAll() {
     STATE.ledger = data.ledger || [];
     STATE.categories = data.categories || [];
     STATE.budget = data.budget || [];
+    STATE.events = data.events || [];
     renderAll();
   } else if (data.error && data.error.indexOf('logged in') !== -1) {
     clearSession();
@@ -530,6 +674,7 @@ function renderAll() {
   renderBudgetTab();
   renderReportsTab();
   renderBalance();
+  renderEventsList();
 }
 
 /* ---------- Nav ---------- */
@@ -777,6 +922,163 @@ function renderReportsTab() {
     }).join('');
   document.getElementById('report-bars').innerHTML = bars || '<div class="status-msg">No entries this month.</div>';
 }
+
+/* ---------- Events tab (separate mini-ledgers) ---------- */
+let CURRENT_EVENT_ID = null;
+
+function renderEventsList() {
+  const container = document.getElementById('events-cards');
+  if (!container) return;
+  if (STATE.events.length === 0) {
+    container.innerHTML = '<div class="status-msg">No events yet. Create one above.</div>';
+    return;
+  }
+  const sorted = [...STATE.events].sort((a, b) => new Date(b.CreatedOn) - new Date(a.CreatedOn));
+  container.innerHTML = sorted.map(ev => `
+    <div class="event-card" onclick="openEvent('${ev.ID}')">
+      <div>
+        <h3>${ev.Name}</h3>
+        <div class="sub status-msg">
+          ${ev.StartDate ? formatDate(ev.StartDate) : ''}${ev.EndDate ? ' – ' + formatDate(ev.EndDate) : ''}
+          <span class="tag ${ev.Status === 'Closed' ? 'expense' : 'income'}" style="margin-left:8px;">${ev.Status}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('event-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('event-status');
+  status.textContent = 'Creating…'; status.className = 'status-msg';
+  const res = await apiPost({
+    action: 'addEvent',
+    name: document.getElementById('ev-name').value.trim(),
+    startDate: document.getElementById('ev-start').value,
+    endDate: document.getElementById('ev-end').value
+  });
+  if (res.ok) {
+    status.textContent = 'Event created.'; status.className = 'status-msg ok';
+    e.target.reset();
+    await loadAll();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+
+async function openEvent(id) {
+  CURRENT_EVENT_ID = id;
+  document.getElementById('events-list-view').style.display = 'none';
+  document.getElementById('event-detail-view').style.display = 'block';
+  await renderEventDetail();
+}
+
+document.getElementById('event-back-btn').addEventListener('click', () => {
+  CURRENT_EVENT_ID = null;
+  document.getElementById('event-detail-view').style.display = 'none';
+  document.getElementById('events-list-view').style.display = 'block';
+  loadAll();
+});
+
+async function renderEventDetail() {
+  const ev = STATE.events.find(e => e.ID === CURRENT_EVENT_ID);
+  if (!ev) return;
+  document.getElementById('event-detail-title').textContent = ev.Name;
+  document.getElementById('event-detail-dates').textContent =
+    (ev.StartDate ? formatDate(ev.StartDate) : '') + (ev.EndDate ? ' – ' + formatDate(ev.EndDate) : '');
+
+  const statusTag = document.getElementById('event-status-tag');
+  statusTag.textContent = ev.Status;
+  statusTag.className = 'tag ' + (ev.Status === 'Closed' ? 'expense' : 'income');
+
+  const toggleBtn = document.getElementById('event-toggle-status-btn');
+  toggleBtn.textContent = ev.Status === 'Closed' ? 'Reopen Event' : 'Close Event';
+  document.getElementById('event-entry-panel').style.display = ev.Status === 'Closed' ? 'none' : 'block';
+
+  document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+
+  const res = await apiGet('eventEntries', { eventId: CURRENT_EVENT_ID });
+  const entries = res.ok ? (res.data || []) : [];
+  STATE.currentEventEntries = entries;
+
+  const income = entries.filter(e => e.Type === 'Income').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  const expense = entries.filter(e => e.Type === 'Expense').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  document.getElementById('ev-stat-income').textContent = formatINR(income);
+  document.getElementById('ev-stat-expense').textContent = formatINR(expense);
+  const netEl = document.getElementById('ev-stat-net');
+  netEl.textContent = formatINR(income - expense);
+  netEl.className = 'val ' + (income - expense >= 0 ? 'income' : 'expense');
+
+  const body = document.getElementById('event-entries-body');
+  const empty = document.getElementById('event-entries-empty');
+  if (entries.length === 0) {
+    body.innerHTML = ''; empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  const sorted = [...entries].sort((a, b) => new Date(a.Date) - new Date(b.Date));
+  body.innerHTML = sorted.map(r => `
+    <tr>
+      <td>${formatDate(r.Date)}</td>
+      <td><span class="tag ${r.Type === 'Income' ? 'income' : 'expense'}">${r.Type}</span></td>
+      <td>${r.Description || ''}</td>
+      <td>${r.PaymentMode || ''}</td>
+      <td class="${r.Type === 'Income' ? 'amt-income' : 'amt-expense'}">${r.Type === 'Income' ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
+      <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('event-entry-status');
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost({
+    action: 'addEventEntry',
+    eventId: CURRENT_EVENT_ID,
+    date: document.getElementById('ee-date').value,
+    type: document.getElementById('ee-type').value,
+    description: document.getElementById('ee-description').value,
+    amount: document.getElementById('ee-amount').value,
+    paymentMode: document.getElementById('ee-mode').value,
+    reference: document.getElementById('ee-reference').value
+  });
+  if (res.ok) {
+    status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    e.target.reset();
+    document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+    await renderEventDetail();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+
+async function deleteEventEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  await apiPost({ action: 'deleteEventEntry', id });
+  await renderEventDetail();
+}
+
+document.getElementById('event-toggle-status-btn').addEventListener('click', async () => {
+  const ev = STATE.events.find(e => e.ID === CURRENT_EVENT_ID);
+  if (!ev) return;
+  const newStatus = ev.Status === 'Closed' ? 'Open' : 'Closed';
+  if (newStatus === 'Closed' && !confirm('Close this event? You can still view and print it, and reopen it later if needed.')) return;
+  await apiPost({ action: 'setEventStatus', id: CURRENT_EVENT_ID, status: newStatus });
+  await loadAll();
+  await renderEventDetail();
+});
+
+document.getElementById('event-print-btn').addEventListener('click', () => {
+  window.print();
+});
+
+document.querySelector('[data-tab="events"]').addEventListener('click', () => {
+  CURRENT_EVENT_ID = null;
+  document.getElementById('event-detail-view').style.display = 'none';
+  document.getElementById('events-list-view').style.display = 'block';
+  renderEventsList();
+});
 
 /* ---------- Admin / Users tab ---------- */
 async function loadUsers() {
