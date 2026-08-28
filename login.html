@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in — General Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F1E6; --ink:#1B2A44; --cloth:#2F5233; --cloth-dark:#213B26;
+    --rule-red:#B23A2E; --brass:#A9823D; --brass-soft:#C9A65F; --muted:#7A7266; --line:#D8D0BC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;min-height:100vh;background:var(--cloth);
+    background-image:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.14));
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Sans',sans-serif;color:var(--ink);
+  }
+  .login-card{
+    background:var(--paper);border-radius:2px;padding:38px 40px;width:100%;max-width:340px;
+    box-shadow:0 18px 40px rgba(0,0,0,0.25);text-align:center;border-top:4px solid var(--brass);
+  }
+  .mark{
+    font-family:'Fraunces',serif;font-weight:700;font-size:1.9rem;color:var(--cloth);
+    border-bottom:3px double var(--ink);display:inline-block;padding:0 6px 6px;margin-bottom:6px;
+  }
+  h1{font-family:'Fraunces',serif;font-size:1.15rem;font-weight:600;margin:14px 0 2px;}
+  .sub{color:var(--muted);font-size:0.8rem;margin-bottom:22px;}
+  label{display:block;text-align:left;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:0 0 5px;}
+  input{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:2px;
+    background:#EFE9D8;color:var(--ink);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;
+    margin-bottom:14px;
+  }
+  input:focus{outline:2px solid var(--brass-soft);outline-offset:0;background:#FFFDF7;}
+  .btn{
+    width:100%;background:var(--cloth);color:#fff;border:none;padding:10px 20px;border-radius:2px;
+    font-size:0.85rem;font-weight:600;cursor:pointer;letter-spacing:0.01em;transition:background 0.15s;
+  }
+  .btn:hover{background:var(--cloth-dark);}
+  .btn:disabled{opacity:0.6;cursor:default;}
+  .login-err{color:var(--rule-red);font-size:0.8rem;margin-top:12px;min-height:1.2em;}
+  .login-err.hidden{display:none;}
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <div class="mark">₹</div>
+  <h1>General Ledger</h1>
+  <div class="sub">CSITA Christ Church, Gandhinagar</div>
+  <form id="login-form">
+    <label for="login-username">Username</label>
+    <input type="text" id="login-username" required autofocus autocomplete="username">
+    <label for="login-password">Password</label>
+    <input type="password" id="login-password" required autocomplete="current-password">
+    <button type="submit" class="btn" id="login-btn">Log in</button>
+    <div class="login-err hidden" id="login-err"></div>
+  </form>
+</div>
+
+<script>
+/* Paste the same Apps Script Web App URL used in index.html */
+const CONFIG = {
+  API_URL: 'https://script.google.com/macros/s/AKfycbzuDtVWlm1zl_9os_ovMgflRTnAAGE0aPblPXM-oQQVYDNqqFQqNd-senTOTa3LozxM/exec'
+};
+
+const SESSION_TOKEN_KEY = 'csita_treasury_token';
+const SESSION_USER_KEY = 'csita_treasury_user';
+const SESSION_ROLE_KEY = 'csita_treasury_role';
+
+// already logged in? skip straight to the app
+if (localStorage.getItem(SESSION_TOKEN_KEY)) {
+  window.location.href = 'index.html';
+}
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  err.classList.add('hidden');
+  err.textContent = '';
+
+  if (!CONFIG.API_URL || CONFIG.API_URL.indexOf('PASTE_YOUR') === 0) {
+    err.textContent = 'API_URL not configured yet in login.html.';
+    err.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  try {
+    const res = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'login', username, password })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem(SESSION_TOKEN_KEY, data.token);
+      localStorage.setItem(SESSION_USER_KEY, data.username);
+      localStorage.setItem(SESSION_ROLE_KEY, data.role);
+      window.location.href = 'index.html';
+    } else {
+      err.textContent = data.error || 'Login failed.';
+      err.classList.remove('hidden');
+    }
+  } catch (ex) {
+    err.textContent = 'Could not reach the server. Check your connection.';
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Log in';
+  }
+});
+</script>
+</body>
+</html>

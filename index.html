@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>General Ledger — CSITA Christ Church, Gandhinagar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F1E6;
+    --paper-alt:#EFE9D8;
+    --ink:#1B2A44;
+    --ink-soft:#33425C;
+    --cloth:#2F5233;
+    --cloth-dark:#213B26;
+    --rule-red:#B23A2E;
+    --brass:#A9823D;
+    --brass-soft:#C9A65F;
+    --muted:#7A7266;
+    --line:#D8D0BC;
+    --white:#FFFDF7;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
+  .app{display:flex;min-height:100vh;}
+
+  /* ---- Spine nav ---- */
+  .spine{
+    width:220px;flex-shrink:0;background:var(--cloth);
+    background-image:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.12));
+    display:flex;flex-direction:column;padding:28px 0;
+  }
+  .spine-title{
+    font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;color:var(--white);
+    padding:0 22px 22px;border-bottom:1px solid rgba(255,255,255,0.15);margin-bottom:10px;
+    line-height:1.3;
+  }
+  .spine-title small{display:block;font-family:'IBM Plex Sans',sans-serif;font-weight:400;font-size:0.7rem;color:var(--brass-soft);letter-spacing:0.06em;margin-top:6px;text-transform:uppercase;}
+  .tab{
+    position:relative;display:flex;align-items:center;gap:10px;
+    padding:13px 22px;color:rgba(255,255,255,0.72);cursor:pointer;
+    font-size:0.92rem;letter-spacing:0.01em;transition:background 0.15s, color 0.15s;
+    border-left:3px solid transparent;
+  }
+  .tab:hover{background:rgba(255,255,255,0.06);color:var(--white);}
+  .tab.active{background:var(--paper);color:var(--cloth-dark);font-weight:600;border-left-color:var(--brass);}
+  .tab .idx{
+    font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:var(--brass-soft);
+    width:18px;
+  }
+  .tab.active .idx{color:var(--brass);}
+
+  /* ---- Main ---- */
+  .main{flex:1;padding:36px 44px;max-width:1080px;}
+  header.page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;flex-wrap:wrap;gap:18px;}
+  header.page-head h1{font-family:'Fraunces',serif;font-weight:600;font-size:1.7rem;margin:0 0 4px;}
+  header.page-head .sub{color:var(--muted);font-size:0.85rem;}
+
+  .balance-card{
+    background:var(--white);border:1px solid var(--line);border-left:4px solid var(--rule-red);
+    padding:14px 22px;border-radius:2px;text-align:right;min-width:220px;
+  }
+  .balance-card .label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);}
+  .balance-card .amount{
+    font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:1.6rem;color:var(--ink);
+    border-bottom:3px double var(--ink);padding-bottom:4px;display:inline-block;margin-top:2px;
+  }
+  .balance-card .amount.negative{color:var(--rule-red);}
+
+  section{display:none;}
+  section.active{display:block;}
+
+  /* ---- Cards / panels ---- */
+  .panel{background:var(--white);border:1px solid var(--line);border-radius:2px;padding:20px 24px;margin-bottom:20px;}
+  .panel h2{font-family:'Fraunces',serif;font-size:1.05rem;font-weight:600;margin:0 0 16px;color:var(--ink);}
+
+  /* ---- Forms ---- */
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(160px,1fr));gap:14px;}
+  label{display:block;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:5px;}
+  input,select,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:2px;
+    background:var(--paper-alt);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;font-size:0.9rem;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brass-soft);outline-offset:0;background:var(--white);}
+  input[type=number]{font-family:'IBM Plex Mono',monospace;}
+  .btn{
+    background:var(--cloth);color:var(--white);border:none;padding:10px 20px;border-radius:2px;
+    font-size:0.85rem;font-weight:600;cursor:pointer;letter-spacing:0.01em;transition:background 0.15s;
+  }
+  .btn:hover{background:var(--cloth-dark);}
+  .btn.secondary{background:transparent;color:var(--ink-soft);border:1px solid var(--line);}
+  .btn.secondary:hover{border-color:var(--muted);}
+  .btn.danger{background:transparent;color:var(--rule-red);border:1px solid var(--rule-red);padding:4px 10px;font-size:0.75rem;}
+  .form-actions{margin-top:16px;display:flex;gap:10px;}
+
+  /* ---- Ledger table ---- */
+  table{width:100%;border-collapse:collapse;font-size:0.87rem;}
+  thead th{
+    text-align:left;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;
+    color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--ink);font-weight:600;
+  }
+  thead th.num{text-align:right;}
+  tbody td{padding:9px 10px;border-bottom:1px solid var(--line);}
+  tbody tr:nth-child(even){background:var(--paper-alt);}
+  tbody tr:hover{background:#EFE4CE;}
+  td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
+  td.amt-income{color:var(--cloth-dark);font-family:'IBM Plex Mono',monospace;text-align:right;}
+  td.amt-expense{color:var(--rule-red);font-family:'IBM Plex Mono',monospace;text-align:right;}
+  .ledger-table-wrap{border-left:3px solid var(--rule-red);padding-left:14px;}
+  .tag{font-size:0.7rem;padding:2px 8px;border-radius:10px;background:var(--paper-alt);color:var(--ink-soft);border:1px solid var(--line);}
+  .tag.income{color:var(--cloth-dark);border-color:var(--cloth);}
+  .tag.expense{color:var(--rule-red);border-color:var(--rule-red);}
+
+  .empty-state{padding:36px 10px;text-align:center;color:var(--muted);}
+  .empty-state .big{font-family:'Fraunces',serif;font-size:1.1rem;color:var(--ink-soft);margin-bottom:6px;}
+
+  .filters{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;}
+  .filters > div{min-width:140px;}
+
+  /* ---- Reports ---- */
+  .report-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(220px,1fr));gap:16px;}
+  .stat-card{background:var(--white);border:1px solid var(--line);padding:16px 18px;border-radius:2px;}
+  .stat-card .label{font-size:0.72rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.06em;}
+  .stat-card .val{font-family:'IBM Plex Mono',monospace;font-size:1.4rem;font-weight:600;margin-top:4px;}
+  .stat-card .val.income{color:var(--cloth-dark);}
+  .stat-card .val.expense{color:var(--rule-red);}
+
+  .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:0.85rem;}
+  .bar-label{width:170px;flex-shrink:0;color:var(--ink-soft);}
+  .bar-track{flex:1;background:var(--paper-alt);border-radius:2px;height:10px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--cloth);}
+  .bar-fill.over{background:var(--rule-red);}
+  .bar-amt{width:170px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:0.78rem;color:var(--muted);flex-shrink:0;}
+
+  .cat-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .cat-chip{display:flex;align-items:center;gap:8px;background:var(--paper-alt);border:1px solid var(--line);padding:5px 10px;border-radius:14px;font-size:0.8rem;}
+
+  .status-msg{font-size:0.8rem;margin-top:10px;color:var(--muted);}
+  .status-msg.err{color:var(--rule-red);}
+  .status-msg.ok{color:var(--cloth-dark);}
+
+  ::placeholder{color:#A99F8C;}
+
+  /* ---- Login overlay ---- */
+  #login-overlay{
+    position:fixed;inset:0;background:var(--cloth);
+    background-image:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.14));
+    display:flex;align-items:center;justify-content:center;z-index:100;
+  }
+  .login-card{
+    background:var(--paper);border-radius:2px;padding:38px 40px;width:100%;max-width:340px;
+    box-shadow:0 18px 40px rgba(0,0,0,0.25);text-align:center;border-top:4px solid var(--brass);
+  }
+  .login-card .mark{
+    font-family:'Fraunces',serif;font-weight:700;font-size:1.9rem;color:var(--cloth);
+    border-bottom:3px double var(--ink);display:inline-block;padding:0 6px 6px;margin-bottom:6px;
+  }
+  .login-card h1{font-family:'Fraunces',serif;font-size:1.15rem;font-weight:600;margin:14px 0 2px;}
+  .login-card .sub{color:var(--muted);font-size:0.8rem;margin-bottom:22px;}
+  .login-card input{text-align:center;letter-spacing:0.05em;margin-bottom:14px;}
+  .login-card .btn{width:100%;}
+  .login-card .login-err{color:var(--rule-red);font-size:0.8rem;margin-top:10px;min-height:1.2em;}
+  #app-root{display:none;}
+  .logout-link{
+    font-size:0.75rem;color:var(--brass-soft);cursor:pointer;margin-top:14px;
+    text-decoration:underline;text-underline-offset:2px;
+  }
+
+  @media (max-width:800px){
+    .app{flex-direction:column;}
+    .spine{width:100%;flex-direction:row;overflow-x:auto;padding:10px;}
+    .spine-title{display:none;}
+    .tab{padding:10px 14px;border-left:none;border-bottom:3px solid transparent;white-space:nowrap;}
+    .tab.active{border-left:none;border-bottom-color:var(--brass);}
+    .main{padding:20px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="app" id="app-root">
+  <nav class="spine">
+    <div class="spine-title">General Ledger<small>CSITA Christ Church · Gandhinagar</small></div>
+    <div class="tab active" data-tab="ledger"><span class="idx">01</span> Ledger</div>
+    <div class="tab" data-tab="categories"><span class="idx">02</span> Categories</div>
+    <div class="tab" data-tab="budget"><span class="idx">03</span> Budget</div>
+    <div class="tab" data-tab="reports"><span class="idx">04</span> Reports</div>
+    <div class="tab" data-tab="admin" id="admin-tab" style="display:none;"><span class="idx">05</span> Users</div>
+    <div style="flex:1;"></div>
+    <div style="padding:0 22px 4px;font-size:0.72rem;color:rgba(255,255,255,0.6);" id="current-user-label"></div>
+    <div class="logout-link" id="logout-btn" style="padding:0 22px 6px;">Log out</div>
+  </nav>
+
+  <main class="main">
+    <header class="page-head">
+      <div>
+        <h1 id="page-title">Ledger</h1>
+        <div class="sub">Treasury records, CSITA Christ Church, Gandhinagar</div>
+      </div>
+      <div class="balance-card">
+        <div class="label">Current Balance</div>
+        <div class="amount" id="balance-amount">₹ 0</div>
+      </div>
+    </header>
+
+    <div id="config-warning" class="panel" style="display:none;border-left:4px solid var(--rule-red);">
+      <strong>Not connected yet.</strong> Open this file and set <code>CONFIG.API_URL</code> to your
+      Apps Script Web App URL (see SETUP.md) before entries will save.
+    </div>
+
+    <!-- ================= LEDGER ================= -->
+    <section id="tab-ledger" class="active">
+      <div class="panel">
+        <h2>New Entry</h2>
+        <form id="entry-form">
+          <div class="form-grid">
+            <div>
+              <label>Date</label>
+              <input type="date" id="f-date" required>
+            </div>
+            <div>
+              <label>Type</label>
+              <select id="f-type" required>
+                <option value="Income">Income</option>
+                <option value="Expense">Expense</option>
+              </select>
+            </div>
+            <div>
+              <label>Category</label>
+              <select id="f-category" required></select>
+            </div>
+            <div>
+              <label>Payment Mode</label>
+              <select id="f-mode">
+                <option>Cash</option>
+                <option>UPI</option>
+                <option>Cheque</option>
+                <option>Bank Transfer</option>
+              </select>
+            </div>
+            <div>
+              <label>Amount (₹)</label>
+              <input type="number" id="f-amount" min="0" step="0.01" required>
+            </div>
+            <div>
+              <label>Reference No.</label>
+              <input type="text" id="f-reference" placeholder="optional">
+            </div>
+            <div style="grid-column:1/-1;">
+              <label>Description</label>
+              <input type="text" id="f-description" placeholder="e.g. Sunday offering, 23 Aug">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn">Add Entry</button>
+            <span class="status-msg" id="entry-status"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>Register</h2>
+        <div class="filters">
+          <div>
+            <label>Type</label>
+            <select id="filter-type">
+              <option value="">All</option>
+              <option value="Income">Income</option>
+              <option value="Expense">Expense</option>
+            </select>
+          </div>
+          <div>
+            <label>Category</label>
+            <select id="filter-category"><option value="">All</option></select>
+          </div>
+          <div>
+            <label>Month</label>
+            <input type="month" id="filter-month">
+          </div>
+          <div>
+            <button class="btn secondary" id="filter-clear" type="button">Clear filters</button>
+          </div>
+        </div>
+        <div class="ledger-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Type</th><th>Category</th><th>Description</th>
+                <th>Mode</th><th class="num">Amount</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="ledger-body"></tbody>
+          </table>
+          <div class="empty-state" id="ledger-empty" style="display:none;">
+            <div class="big">No entries yet</div>
+            Add your first entry above to start the register.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CATEGORIES ================= -->
+    <section id="tab-categories">
+      <div class="panel">
+        <h2>Add Category</h2>
+        <form id="category-form">
+          <div class="form-grid">
+            <div>
+              <label>Type</label>
+              <select id="c-type">
+                <option value="Income">Income</option>
+                <option value="Expense">Expense</option>
+              </select>
+            </div>
+            <div>
+              <label>Category Name</label>
+              <input type="text" id="c-name" placeholder="e.g. Building Fund" required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn">Add Category</button>
+            <span class="status-msg" id="category-status"></span>
+          </div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Income Categories</h2>
+        <div class="cat-list" id="cat-list-income"></div>
+      </div>
+      <div class="panel">
+        <h2>Expense Categories</h2>
+        <div class="cat-list" id="cat-list-expense"></div>
+      </div>
+    </section>
+
+    <!-- ================= BUDGET ================= -->
+    <section id="tab-budget">
+      <div class="panel">
+        <h2>Set Budget</h2>
+        <form id="budget-form">
+          <div class="form-grid">
+            <div>
+              <label>Year</label>
+              <input type="number" id="b-year" value="2026" required>
+            </div>
+            <div>
+              <label>Category</label>
+              <select id="b-category" required></select>
+            </div>
+            <div>
+              <label>Budgeted Amount (₹)</label>
+              <input type="number" id="b-amount" min="0" step="1" required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn">Save Budget</button>
+            <span class="status-msg" id="budget-status"></span>
+          </div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Budget vs Actual — <span id="budget-year-label">2026</span></h2>
+        <div id="budget-bars"></div>
+      </div>
+    </section>
+
+    <!-- ================= REPORTS ================= -->
+    <section id="tab-reports">
+      <div class="panel">
+        <h2>Monthly Summary — <span id="report-month-label"></span></h2>
+        <input type="month" id="report-month" style="max-width:200px;margin-bottom:16px;">
+        <div class="report-grid">
+          <div class="stat-card"><div class="label">Income</div><div class="val income" id="stat-income">₹ 0</div></div>
+          <div class="stat-card"><div class="label">Expense</div><div class="val expense" id="stat-expense">₹ 0</div></div>
+          <div class="stat-card"><div class="label">Net</div><div class="val" id="stat-net">₹ 0</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>By Category</h2>
+        <div id="report-bars"></div>
+      </div>
+    </section>
+
+    <!-- ================= ADMIN / USERS ================= -->
+    <section id="tab-admin">
+      <div class="panel">
+        <h2>Add User</h2>
+        <form id="user-form">
+          <div class="form-grid">
+            <div>
+              <label>Username</label>
+              <input type="text" id="u-username" required autocomplete="off">
+            </div>
+            <div>
+              <label>Password</label>
+              <input type="password" id="u-password" required autocomplete="new-password">
+            </div>
+            <div>
+              <label>Role</label>
+              <select id="u-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn">Add User</button>
+            <span class="status-msg" id="user-status"></span>
+          </div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Users</h2>
+        <table>
+          <thead><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr></thead>
+          <tbody id="users-body"></tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h2>Change My Password</h2>
+        <form id="password-form">
+          <div class="form-grid">
+            <div>
+              <label>Current Password</label>
+              <input type="password" id="p-current" required autocomplete="current-password">
+            </div>
+            <div>
+              <label>New Password</label>
+              <input type="password" id="p-new" required autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn">Update Password</button>
+            <span class="status-msg" id="password-status"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* =========================================================
+   CONFIG — paste your Apps Script Web App URL here
+   ========================================================= */
+const CONFIG = {
+  API_URL: 'https://script.google.com/macros/s/AKfycbzuDtVWlm1zl_9os_ovMgflRTnAAGE0aPblPXM-oQQVYDNqqFQqNd-senTOTa3LozxM/exec'
+};
+
+let STATE = { ledger: [], categories: [], budget: [] };
+
+/* ---------- Session (login happens on login.html, not here) ---------- */
+const SESSION_TOKEN_KEY = 'csita_treasury_token';
+const SESSION_USER_KEY = 'csita_treasury_user';
+const SESSION_ROLE_KEY = 'csita_treasury_role';
+
+function getToken() {
+  return localStorage.getItem(SESSION_TOKEN_KEY);
+}
+function clearSession() {
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem(SESSION_USER_KEY);
+  localStorage.removeItem(SESSION_ROLE_KEY);
+}
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await apiPost({ action: 'logout' });
+  clearSession();
+  window.location.href = 'login.html';
+});
+
+/* ---------- API helpers ---------- */
+async function apiGet(action) {
+  const token = encodeURIComponent(getToken() || '');
+  const res = await fetch(`${CONFIG.API_URL}?action=${action}&token=${token}`);
+  return res.json();
+}
+async function apiPost(payload) {
+  const res = await fetch(CONFIG.API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight on Apps Script
+    body: JSON.stringify({ ...payload, token: getToken() })
+  });
+  return res.json();
+}
+
+/* ---------- Init ---------- */
+async function boot() {
+  if (!getToken()) {
+    window.location.href = 'login.html';
+    return;
+  }
+  if (!CONFIG.API_URL) {
+    document.getElementById('config-warning').style.display = 'block';
+    return;
+  }
+  const check = await apiGet('verifySession');
+  if (!check.ok) {
+    clearSession();
+    window.location.href = 'login.html';
+    return;
+  }
+  document.getElementById('current-user-label').textContent = localStorage.getItem(SESSION_USER_KEY) || '';
+  if (localStorage.getItem(SESSION_ROLE_KEY) === 'admin') {
+    document.getElementById('admin-tab').style.display = 'flex';
+  }
+  document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  loadAll();
+}
+
+async function loadAll() {
+  const data = await apiGet('all');
+  if (data.ok) {
+    STATE.ledger = data.ledger || [];
+    STATE.categories = data.categories || [];
+    STATE.budget = data.budget || [];
+    renderAll();
+  } else if (data.error && data.error.indexOf('logged in') !== -1) {
+    clearSession();
+    window.location.href = 'login.html';
+  }
+}
+
+function renderAll() {
+  renderCategoryDropdowns();
+  renderLedgerTable();
+  renderCategoriesTab();
+  renderBudgetTab();
+  renderReportsTab();
+  renderBalance();
+}
+
+/* ---------- Nav ---------- */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    document.getElementById('page-title').textContent =
+      tab.textContent.trim().replace(/^\d+\s*/, '');
+  });
+});
+
+/* ---------- Balance ---------- */
+function renderBalance() {
+  const income = STATE.ledger.filter(e => e.Type === 'Income').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  const expense = STATE.ledger.filter(e => e.Type === 'Expense').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  const bal = income - expense;
+  const el = document.getElementById('balance-amount');
+  el.textContent = formatINR(bal);
+  el.classList.toggle('negative', bal < 0);
+}
+
+function formatINR(n) {
+  const sign = n < 0 ? '-' : '';
+  return sign + '₹ ' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+}
+
+/* ---------- Category dropdowns ---------- */
+function categoriesOfType(type) {
+  return STATE.categories.filter(c => c.Type === type).map(c => c.Category);
+}
+function renderCategoryDropdowns() {
+  const type = document.getElementById('f-type').value || 'Income';
+  fillSelect('f-category', categoriesOfType(type));
+  fillSelect('filter-category', STATE.categories.map(c => c.Category), true);
+  fillSelect('b-category', STATE.categories.map(c => c.Category));
+}
+function fillSelect(id, items, withAll) {
+  const sel = document.getElementById(id);
+  const current = sel.value;
+  sel.innerHTML = (withAll ? '<option value="">All</option>' : '') +
+    [...new Set(items)].map(i => `<option value="${i}">${i}</option>`).join('');
+  if ([...sel.options].some(o => o.value === current)) sel.value = current;
+}
+document.getElementById('f-type').addEventListener('change', renderCategoryDropdowns);
+
+/* ---------- Ledger tab ---------- */
+document.getElementById('entry-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('entry-status');
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const payload = {
+    action: 'addEntry',
+    date: document.getElementById('f-date').value,
+    type: document.getElementById('f-type').value,
+    category: document.getElementById('f-category').value,
+    description: document.getElementById('f-description').value,
+    amount: document.getElementById('f-amount').value,
+    paymentMode: document.getElementById('f-mode').value,
+    reference: document.getElementById('f-reference').value
+  };
+  const res = await apiPost(payload);
+  if (res.ok) {
+    status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    e.target.reset();
+    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+    await loadAll();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+
+['filter-type', 'filter-category', 'filter-month'].forEach(id =>
+  document.getElementById(id).addEventListener('change', renderLedgerTable)
+);
+document.getElementById('filter-clear').addEventListener('click', () => {
+  document.getElementById('filter-type').value = '';
+  document.getElementById('filter-category').value = '';
+  document.getElementById('filter-month').value = '';
+  renderLedgerTable();
+});
+
+function renderLedgerTable() {
+  const type = document.getElementById('filter-type').value;
+  const category = document.getElementById('filter-category').value;
+  const month = document.getElementById('filter-month').value; // YYYY-MM
+
+  let rows = [...STATE.ledger].sort((a, b) => new Date(b.Date) - new Date(a.Date));
+  if (type) rows = rows.filter(r => r.Type === type);
+  if (category) rows = rows.filter(r => r.Category === category);
+  if (month) rows = rows.filter(r => String(r.Date).slice(0, 7) === month);
+
+  const body = document.getElementById('ledger-body');
+  const empty = document.getElementById('ledger-empty');
+  if (rows.length === 0) {
+    body.innerHTML = ''; empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${formatDate(r.Date)}</td>
+      <td><span class="tag ${r.Type === 'Income' ? 'income' : 'expense'}">${r.Type}</span></td>
+      <td>${r.Category}</td>
+      <td>${r.Description || ''}</td>
+      <td>${r.PaymentMode || ''}</td>
+      <td class="${r.Type === 'Income' ? 'amt-income' : 'amt-expense'}">${r.Type === 'Income' ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
+      <td><button class="btn danger" onclick="deleteEntry('${r.ID}')">Delete</button></td>
+    </tr>
+  `).join('');
+}
+
+function formatDate(d) {
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+async function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  await apiPost({ action: 'deleteEntry', id });
+  await loadAll();
+}
+
+/* ---------- Categories tab ---------- */
+document.getElementById('category-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('category-status');
+  const payload = {
+    action: 'addCategory',
+    type: document.getElementById('c-type').value,
+    category: document.getElementById('c-name').value
+  };
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost(payload);
+  if (res.ok) {
+    status.textContent = 'Category added.'; status.className = 'status-msg ok';
+    e.target.reset();
+    await loadAll();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+
+function renderCategoriesTab() {
+  const inc = document.getElementById('cat-list-income');
+  const exp = document.getElementById('cat-list-expense');
+  inc.innerHTML = categoriesOfType('Income').map(c => chip('Income', c)).join('') || '<span class="status-msg">None yet.</span>';
+  exp.innerHTML = categoriesOfType('Expense').map(c => chip('Expense', c)).join('') || '<span class="status-msg">None yet.</span>';
+}
+function chip(type, name) {
+  return `<div class="cat-chip">${name} <button class="btn danger" onclick="deleteCategory('${type}','${name}')">×</button></div>`;
+}
+async function deleteCategory(type, category) {
+  if (!confirm(`Remove category "${category}"? Past entries keep the label, but it won't be selectable for new ones.`)) return;
+  await apiPost({ action: 'deleteCategory', type, category });
+  await loadAll();
+}
+
+/* ---------- Budget tab ---------- */
+document.getElementById('budget-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('budget-status');
+  const payload = {
+    action: 'setBudget',
+    year: document.getElementById('b-year').value,
+    category: document.getElementById('b-category').value,
+    amount: document.getElementById('b-amount').value
+  };
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost(payload);
+  if (res.ok) {
+    status.textContent = 'Budget saved.'; status.className = 'status-msg ok';
+    await loadAll();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+document.getElementById('b-year').addEventListener('change', renderBudgetTab);
+
+function renderBudgetTab() {
+  const year = document.getElementById('b-year').value;
+  document.getElementById('budget-year-label').textContent = year;
+  const budgets = STATE.budget.filter(b => String(b.Year) === String(year));
+  const container = document.getElementById('budget-bars');
+  if (budgets.length === 0) {
+    container.innerHTML = '<div class="status-msg">No budgets set for this year yet.</div>';
+    return;
+  }
+  container.innerHTML = budgets.map(b => {
+    const spent = STATE.ledger
+      .filter(e => e.Category === b.Category && new Date(e.Date).getFullYear() == year && e.Type === 'Expense')
+      .reduce((s, e) => s + Number(e.Amount || 0), 0);
+    const pct = Math.min(100, (spent / Number(b.BudgetedAmount || 1)) * 100);
+    const over = spent > Number(b.BudgetedAmount);
+    return `
+      <div class="bar-row">
+        <div class="bar-label">${b.Category}</div>
+        <div class="bar-track"><div class="bar-fill ${over ? 'over' : ''}" style="width:${pct}%"></div></div>
+        <div class="bar-amt">${formatINR(spent)} / ${formatINR(Number(b.BudgetedAmount))}</div>
+      </div>`;
+  }).join('');
+}
+
+/* ---------- Reports tab ---------- */
+document.getElementById('report-month').addEventListener('change', renderReportsTab);
+
+function renderReportsTab() {
+  const monthInput = document.getElementById('report-month');
+  if (!monthInput.value) {
+    monthInput.value = new Date().toISOString().slice(0, 7);
+  }
+  const month = monthInput.value;
+  document.getElementById('report-month-label').textContent =
+    new Date(month + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  const entries = STATE.ledger.filter(e => String(e.Date).slice(0, 7) === month);
+  const income = entries.filter(e => e.Type === 'Income').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  const expense = entries.filter(e => e.Type === 'Expense').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  document.getElementById('stat-income').textContent = formatINR(income);
+  document.getElementById('stat-expense').textContent = formatINR(expense);
+  const netEl = document.getElementById('stat-net');
+  netEl.textContent = formatINR(income - expense);
+  netEl.className = 'val ' + (income - expense >= 0 ? 'income' : 'expense');
+
+  const byCategory = {};
+  entries.forEach(e => {
+    const key = e.Category + '|' + e.Type;
+    byCategory[key] = (byCategory[key] || 0) + Number(e.Amount || 0);
+  });
+  const max = Math.max(1, ...Object.values(byCategory));
+  const bars = Object.entries(byCategory)
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, amt]) => {
+      const [cat, type] = key.split('|');
+      const pct = (amt / max) * 100;
+      return `
+        <div class="bar-row">
+          <div class="bar-label">${cat} <span class="tag ${type === 'Income' ? 'income' : 'expense'}" style="margin-left:4px;">${type}</span></div>
+          <div class="bar-track"><div class="bar-fill ${type === 'Expense' ? 'over' : ''}" style="width:${pct}%"></div></div>
+          <div class="bar-amt">${formatINR(amt)}</div>
+        </div>`;
+    }).join('');
+  document.getElementById('report-bars').innerHTML = bars || '<div class="status-msg">No entries this month.</div>';
+}
+
+/* ---------- Admin / Users tab ---------- */
+async function loadUsers() {
+  const res = await apiGet('listUsers');
+  if (res.ok) {
+    renderUsers(res.data || []);
+  } else {
+    document.getElementById('users-body').innerHTML =
+      `<tr><td colspan="4" class="status-msg err">${res.error || 'Could not load users.'}</td></tr>`;
+  }
+}
+function renderUsers(users) {
+  const body = document.getElementById('users-body');
+  if (users.length === 0) {
+    body.innerHTML = '<tr><td colspan="4">No users yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.Username}</td>
+      <td><span class="tag ${u.Role === 'admin' ? 'income' : ''}">${u.Role}</span></td>
+      <td>${formatDate(u.CreatedOn)}</td>
+      <td><button class="btn danger" onclick="deleteUser('${u.Username}')">Delete</button></td>
+    </tr>
+  `).join('');
+}
+document.getElementById('user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('user-status');
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost({
+    action: 'addUser',
+    username: document.getElementById('u-username').value.trim(),
+    password: document.getElementById('u-password').value,
+    role: document.getElementById('u-role').value
+  });
+  if (res.ok) {
+    status.textContent = 'User added.'; status.className = 'status-msg ok';
+    e.target.reset();
+    loadUsers();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+async function deleteUser(username) {
+  if (!confirm(`Remove user "${username}"?`)) return;
+  const res = await apiPost({ action: 'deleteUser', username });
+  if (!res.ok) alert('Error: ' + res.error);
+  loadUsers();
+}
+document.getElementById('password-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('password-status');
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost({
+    action: 'changePassword',
+    currentPassword: document.getElementById('p-current').value,
+    newPassword: document.getElementById('p-new').value
+  });
+  if (res.ok) {
+    status.textContent = 'Password updated.'; status.className = 'status-msg ok';
+    e.target.reset();
+  } else {
+    status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
+  }
+});
+// load the user list whenever the Users tab is opened
+document.querySelector('[data-tab="admin"]').addEventListener('click', loadUsers);
+
+/* ---------- Boot ---------- */
+boot();
+</script>
+</body>
+</html>
