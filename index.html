@@ -468,7 +468,8 @@
               <div>
                 <label>Type</label>
                 <select id="ee-type" required>
-                  <option value="Income">Income (Sponsor)</option>
+                  <option value="Income-Sponsor">Income (Sponsor)</option>
+                  <option value="Income-Sales">Income (Sales)</option>
                   <option value="Expense">Expense</option>
                 </select>
               </div>
@@ -926,6 +927,17 @@ function renderReportsTab() {
 /* ---------- Events tab (separate mini-ledgers) ---------- */
 let CURRENT_EVENT_ID = null;
 
+// treats legacy "Income" entries and new "Income-Sponsor" / "Income-Sales" the same way
+function isEventIncome(type) {
+  return type === 'Income' || (type && type.indexOf('Income') === 0);
+}
+function eventTypeLabel(type) {
+  if (type === 'Income-Sponsor') return 'Income (Sponsor)';
+  if (type === 'Income-Sales') return 'Income (Sales)';
+  if (type === 'Income') return 'Income';
+  return type;
+}
+
 function renderEventsList() {
   const container = document.getElementById('events-cards');
   if (!container) return;
@@ -1001,7 +1013,7 @@ async function renderEventDetail() {
   const entries = res.ok ? (res.data || []) : [];
   STATE.currentEventEntries = entries;
 
-  const income = entries.filter(e => e.Type === 'Income').reduce((s, e) => s + Number(e.Amount || 0), 0);
+  const income = entries.filter(e => isEventIncome(e.Type)).reduce((s, e) => s + Number(e.Amount || 0), 0);
   const expense = entries.filter(e => e.Type === 'Expense').reduce((s, e) => s + Number(e.Amount || 0), 0);
   document.getElementById('ev-stat-income').textContent = formatINR(income);
   document.getElementById('ev-stat-expense').textContent = formatINR(expense);
@@ -1020,10 +1032,10 @@ async function renderEventDetail() {
   body.innerHTML = sorted.map(r => `
     <tr>
       <td>${formatDate(r.Date)}</td>
-      <td><span class="tag ${r.Type === 'Income' ? 'income' : 'expense'}">${r.Type}</span></td>
+      <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
       <td>${r.Description || ''}</td>
       <td>${r.PaymentMode || ''}</td>
-      <td class="${r.Type === 'Income' ? 'amt-income' : 'amt-expense'}">${r.Type === 'Income' ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
+      <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
       <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
     </tr>
   `).join('');
