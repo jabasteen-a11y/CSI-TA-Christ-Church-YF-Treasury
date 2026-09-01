@@ -482,6 +482,13 @@
                   <option>Bank Transfer</option>
                 </select>
               </div>
+              <div id="ee-bill-status-wrap" style="display:none;">
+                <label>Bill Status</label>
+                <select id="ee-bill-status">
+                  <option value="With Bill">With Bill</option>
+                  <option value="Without Bill">Without Bill</option>
+                </select>
+              </div>
               <div>
                 <label>Amount (₹)</label>
                 <input type="number" id="ee-amount" min="0" step="0.01" required>
@@ -507,7 +514,7 @@
           <div class="ledger-table-wrap">
             <table>
               <thead>
-                <tr><th>Date</th><th>Type</th><th>Description</th><th>Mode</th><th class="num">Amount</th><th class="no-print"></th></tr>
+                <tr><th>Date</th><th>Type</th><th>Bill</th><th>Description</th><th>Mode</th><th class="num">Amount</th><th class="no-print"></th></tr>
               </thead>
               <tbody id="event-entries-body"></tbody>
             </table>
@@ -1033,6 +1040,7 @@ async function renderEventDetail() {
     <tr>
       <td>${formatDate(r.Date)}</td>
       <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
+      <td>${r.Type === 'Expense' ? (r.BillStatus || '') : ''}</td>
       <td>${r.Description || ''}</td>
       <td>${r.PaymentMode || ''}</td>
       <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
@@ -1041,24 +1049,34 @@ async function renderEventDetail() {
   `).join('');
 }
 
+function toggleEventBillStatus() {
+  const wrap = document.getElementById('ee-bill-status-wrap');
+  wrap.style.display = document.getElementById('ee-type').value === 'Expense' ? 'block' : 'none';
+}
+document.getElementById('ee-type').addEventListener('change', toggleEventBillStatus);
+toggleEventBillStatus();
+
 document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('event-entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
+  const type = document.getElementById('ee-type').value;
   const res = await apiPost({
     action: 'addEventEntry',
     eventId: CURRENT_EVENT_ID,
     date: document.getElementById('ee-date').value,
-    type: document.getElementById('ee-type').value,
+    type: type,
     description: document.getElementById('ee-description').value,
     amount: document.getElementById('ee-amount').value,
     paymentMode: document.getElementById('ee-mode').value,
-    reference: document.getElementById('ee-reference').value
+    reference: document.getElementById('ee-reference').value,
+    billStatus: type === 'Expense' ? document.getElementById('ee-bill-status').value : ''
   });
   if (res.ok) {
     status.textContent = 'Entry added.'; status.className = 'status-msg ok';
     e.target.reset();
     document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+    toggleEventBillStatus();
     await renderEventDetail();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';

@@ -28,7 +28,7 @@ const USER_HEADERS = ['Username', 'PasswordHash', 'Role', 'CreatedOn'];
 const EVENT_HEADERS = ['ID', 'Name', 'StartDate', 'EndDate', 'Status', 'CreatedOn'];
 const EVENT_ENTRY_HEADERS = [
   'ID', 'EventID', 'Date', 'Type', 'Description', 'Amount',
-  'PaymentMode', 'Reference', 'EnteredOn'
+  'PaymentMode', 'Reference', 'BillStatus', 'EnteredOn'
 ];
 
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -44,6 +44,16 @@ function getOrCreateSheet_(name, headers) {
     sheet = ss.insertSheet(name);
     sheet.appendRow(headers);
     sheet.setFrozenRows(1);
+    return sheet;
+  }
+  // migrate: add any new headers that don't exist yet in an existing sheet
+  const lastCol = sheet.getLastColumn();
+  const existingHeaders = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    : [];
+  const missing = headers.filter(h => existingHeaders.indexOf(h) === -1);
+  if (missing.length > 0) {
+    sheet.getRange(1, existingHeaders.length + 1, 1, missing.length).setValues([missing]);
   }
   return sheet;
 }
@@ -404,6 +414,7 @@ function doPost(e) {
         Number(body.amount),
         body.paymentMode || '',
         body.reference || '',
+        body.type === 'Expense' ? (body.billStatus || '') : '',
         new Date()
       ]);
       return jsonOut_({ ok: true, id: id });
