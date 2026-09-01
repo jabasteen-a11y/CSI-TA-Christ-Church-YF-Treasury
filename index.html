@@ -177,13 +177,35 @@
   .event-card .sub{font-size:0.8rem;}
   .event-card .amounts{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:0.85rem;}
 
+  /* ---- Event statement print layout ---- */
+  #event-print-area{display:none;}
+  .event-print-page{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;width:100%;}
+  .event-print-title{text-align:center;font-size:18px;font-weight:700;margin:0 0 10px;}
+  .event-print-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #222;}
+  .event-print-col{min-width:0;}
+  .event-print-col + .event-print-col{border-left:1px solid #222;}
+  .event-print-section-title{text-align:center;font-size:15px;font-weight:700;padding:4px 6px;border-bottom:1px solid #222;background:#e8edf5;}
+  .event-print-subtitle{text-align:center;font-size:13px;font-weight:700;padding:3px 6px;border-bottom:1px solid #222;background:#f2f4f8;}
+  .event-print-table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;}
+  .event-print-table th,.event-print-table td{border-bottom:1px solid #222;padding:2px 5px;line-height:1.15;vertical-align:top;}
+  .event-print-table th{font-weight:700;text-align:left;border-bottom:1px solid #222;}
+  .event-print-table th:first-child,.event-print-table td:first-child{width:42px;text-align:center;}
+  .event-print-table th:last-child,.event-print-table td:last-child{width:82px;text-align:right;white-space:nowrap;}
+  .event-print-table .total-row td{font-weight:700;background:#f3c29e;}
+  .event-print-table .profit-row td{font-weight:700;background:#fff1b5;}
+  .event-print-table .remaining-row td{font-weight:700;background:#fff1b5;}
+  .event-print-table .church-row td{font-weight:700;background:#9bcf78;}
+  .event-print-spacer{height:5px;border-bottom:1px solid #222;}
+  .event-print-note{font-size:10px;color:#555;margin-top:6px;}
+  .event-print-blank{height:18px;}
+  .event-print-page .empty-row td{height:18px;}
+  @page{size:A4 landscape;margin:8mm;}
+
   @media print{
-    .spine, .page-head .balance-card, #event-entry-panel, .no-print, .logout-link,
-    #event-back-btn, #event-toggle-status-btn, #event-print-btn, #current-user-label { display:none !important; }
-    .app{display:block;}
-    .main{padding:0;max-width:100%;}
+    body *{visibility:hidden !important;}
+    #event-print-area, #event-print-area *{visibility:visible !important;}
+    #event-print-area{display:block !important;position:absolute;left:0;top:0;width:100%;}
     body{background:#fff;}
-    .panel{border:none;box-shadow:none;padding:8px 0;}
   }
 
   @media (max-width:800px){
@@ -480,6 +502,7 @@
                   <option>UPI</option>
                   <option>Cheque</option>
                   <option>Bank Transfer</option>
+                  <option>Sponsor Item</option>
                 </select>
               </div>
               <div id="ee-bill-status-wrap" style="display:none;">
@@ -523,6 +546,41 @@
               Add sponsor income or expenses above.
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Printable event statement. Populated from the selected event entries. -->
+      <div id="event-print-area">
+        <div class="event-print-page">
+          <div class="event-print-title" id="print-event-title">Breakfast Sales</div>
+          <div class="event-print-grid">
+            <div class="event-print-col">
+              <div class="event-print-section-title">Income</div>
+              <div class="event-print-subtitle">Sponsors (Cash)</div>
+              <table class="event-print-table">
+                <thead><tr><th>S.No</th><th>Name</th><th>Amount</th></tr></thead>
+                <tbody id="print-sponsor-cash-body"></tbody>
+              </table>
+              <div class="event-print-subtitle">Sponsors (Item)</div>
+              <table class="event-print-table">
+                <thead><tr><th>S.No</th><th>Name (Item)</th><th>Cost</th></tr></thead>
+                <tbody id="print-sponsor-item-body"></tbody>
+              </table>
+              <div class="event-print-subtitle" id="print-sales-title">Breakfast Sales</div>
+              <table class="event-print-table">
+                <thead><tr><th>S.No</th><th>Name (Item)</th><th>Cost</th></tr></thead>
+                <tbody id="print-sales-body"></tbody>
+              </table>
+            </div>
+            <div class="event-print-col">
+              <div class="event-print-section-title">Expenditures</div>
+              <table class="event-print-table">
+                <thead><tr><th>S.No</th><th>Item</th><th>Cost</th></tr></thead>
+                <tbody id="print-expense-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="event-print-note" id="print-event-note"></div>
         </div>
       </div>
     </section>
@@ -1099,7 +1157,64 @@ document.getElementById('event-toggle-status-btn').addEventListener('click', asy
   await renderEventDetail();
 });
 
-document.getElementById('event-print-btn').addEventListener('click', () => {
+function isSponsorItemEntry(entry) {
+  const mode = String(entry.PaymentMode || '').trim().toLowerCase();
+  return mode === 'sponsor item' || mode === 'item' || mode === 'in-kind' || mode === 'inkind';
+}
+
+function printTableRows(entries, amountLabel, emptyLabel) {
+  if (!entries.length) {
+    return `<tr class=\"empty-row\"><td colspan=\"3\" style=\"text-align:center;color:#777;\">${emptyLabel || ''}</td></tr>`;
+  }
+  return entries.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.Description || ''}</td>
+      <td>${Number(r.Amount || 0).toLocaleString('en-IN')}</td>
+    </tr>`).join('');
+}
+
+function buildEventPrintStatement() {
+  const ev = STATE.events.find(e => e.ID === CURRENT_EVENT_ID);
+  if (!ev) return false;
+  const entries = STATE.currentEventEntries || [];
+  const sponsorCash = entries.filter(e => e.Type === 'Income-Sponsor' && !isSponsorItemEntry(e));
+  const sponsorItems = entries.filter(e => e.Type === 'Income-Sponsor' && isSponsorItemEntry(e));
+  const sales = entries.filter(e => e.Type === 'Income-Sales' || (e.Type === 'Income' && !isSponsorItemEntry(e)));
+  const expenses = entries.filter(e => e.Type === 'Expense');
+
+  const sponsorCashTotal = sponsorCash.reduce((s,e) => s + Number(e.Amount || 0), 0);
+  const sponsorItemTotal = sponsorItems.reduce((s,e) => s + Number(e.Amount || 0), 0);
+  const salesTotal = sales.reduce((s,e) => s + Number(e.Amount || 0), 0);
+  const expenseTotal = expenses.reduce((s,e) => s + Number(e.Amount || 0), 0);
+  const profit = salesTotal - expenseTotal;
+  const remaining = sponsorCashTotal - expenseTotal;
+  const churchTotal = sponsorCashTotal + profit;
+
+  document.getElementById('print-event-title').textContent = ev.Name || 'Event Statement';
+  document.getElementById('print-sales-title').textContent = `Breakfast Sales${ev.StartDate ? ' - ' + formatDate(ev.StartDate) : ''}`;
+  document.getElementById('print-sponsor-cash-body').innerHTML = printTableRows(sponsorCash, 'Amount', 'No cash sponsors') + `
+    <tr class=\"total-row\"><td></td><td>Total</td><td>${sponsorCashTotal.toLocaleString('en-IN')}</td></tr>`;
+  document.getElementById('print-sponsor-item-body').innerHTML = printTableRows(sponsorItems, 'Cost', 'No item sponsors');
+  document.getElementById('print-sales-body').innerHTML = printTableRows(sales, 'Cost', 'No sales recorded');
+
+  const expenseRows = expenses.length ? expenses.map((r,i) => `
+    <tr><td>${i + 1}</td><td>${r.Description || ''}</td><td>${Number(r.Amount || 0).toLocaleString('en-IN')}</td></tr>`).join('') :
+    `<tr class=\"empty-row\"><td colspan=\"3\" style=\"text-align:center;color:#777;\">No expenditures</td></tr>`;
+  document.getElementById('print-expense-body').innerHTML = expenseRows + `
+    <tr class=\"total-row\"><td></td><td>Total Expenses</td><td>${expenseTotal.toLocaleString('en-IN')}</td></tr>
+    <tr class=\"profit-row\"><td></td><td>Profit</td><td>${profit.toLocaleString('en-IN')}</td></tr>
+    <tr class=\"remaining-row\"><td></td><td>Remaining Amount</td><td>${remaining.toLocaleString('en-IN')}</td></tr>
+    <tr class=\"church-row\"><td></td><td>Total amount paid to church</td><td>${churchTotal.toLocaleString('en-IN')}</td></tr>`;
+
+  document.getElementById('print-event-note').textContent = sponsorItemTotal > 0
+    ? `Item sponsorships recorded separately: ₹ ${sponsorItemTotal.toLocaleString('en-IN')}. Item sponsorships are not included in the cash balance calculations.`
+    : '';
+  return true;
+}
+
+document.getElementById('event-print-btn').addEventListener('click', async () => {
+  if (!buildEventPrintStatement()) return;
   window.print();
 });
 
