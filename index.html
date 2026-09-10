@@ -472,7 +472,7 @@
         </div>
 
         <div class="report-grid" style="margin-bottom:20px;">
-          <div class="stat-card"><div class="label">Sponsor Income</div><div class="val income" id="ev-stat-income">₹ 0</div></div>
+          <div class="stat-card"><div class="label">Income</div><div class="val income" id="ev-stat-income">₹ 0</div></div>
           <div class="stat-card"><div class="label">Expenses</div><div class="val expense" id="ev-stat-expense">₹ 0</div></div>
           <div class="stat-card"><div class="label">Net</div><div class="val" id="ev-stat-net">₹ 0</div></div>
         </div>
@@ -488,6 +488,7 @@
               <div>
                 <label>Type</label>
                 <select id="ee-type" required>
+                  <option value="Income-Advance">Income (Advance from Church)</option>
                   <option value="Income-Sponsor">Income (Sponsor)</option>
                   <option value="Income-Sales">Income (Sales)</option>
                   <option value="Expense">Expense</option>
@@ -519,7 +520,7 @@
               </div>
               <div style="grid-column:1/-1;">
                 <label>Description</label>
-                <input type="text" id="ee-description" placeholder="e.g. Sponsor: John Mathew, or Item: Bread &amp; eggs">
+                <input type="text" id="ee-description" placeholder="e.g. Advance received from Treasury, Sponsor: John Mathew, or Item: Bread &amp; eggs">
               </div>
             </div>
             <div class="form-actions">
@@ -1039,6 +1040,7 @@ function isEventIncome(type) {
   return type === 'Income' || (type && type.indexOf('Income') === 0);
 }
 function eventTypeLabel(type) {
+  if (type === 'Income-Advance') return 'Income (Advance)';
   if (type === 'Income-Sponsor') return 'Income (Sponsor)';
   if (type === 'Income-Sales') return 'Income (Sales)';
   if (type === 'Income') return 'Income';
