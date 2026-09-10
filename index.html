@@ -177,35 +177,20 @@
   .event-card .sub{font-size:0.8rem;}
   .event-card .amounts{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:0.85rem;}
 
-  /* ---- Event statement print layout ---- */
-  #event-print-area{display:none;}
-  .event-print-page{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;width:100%;}
-  .event-print-title{text-align:center;font-size:18px;font-weight:700;margin:0 0 10px;}
-  .event-print-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #222;}
-  .event-print-col{min-width:0;}
-  .event-print-col + .event-print-col{border-left:1px solid #222;}
-  .event-print-section-title{text-align:center;font-size:15px;font-weight:700;padding:4px 6px;border-bottom:1px solid #222;background:#e8edf5;}
-  .event-print-subtitle{text-align:center;font-size:13px;font-weight:700;padding:3px 6px;border-bottom:1px solid #222;background:#f2f4f8;}
-  .event-print-table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;}
-  .event-print-table th,.event-print-table td{border-bottom:1px solid #222;padding:2px 5px;line-height:1.15;vertical-align:top;}
-  .event-print-table th{font-weight:700;text-align:left;border-bottom:1px solid #222;}
-  .event-print-table th:first-child,.event-print-table td:first-child{width:42px;text-align:center;}
-  .event-print-table th:last-child,.event-print-table td:last-child{width:82px;text-align:right;white-space:nowrap;}
-  .event-print-table .total-row td{font-weight:700;background:#f3c29e;}
-  .event-print-table .profit-row td{font-weight:700;background:#fff1b5;}
-  .event-print-table .remaining-row td{font-weight:700;background:#fff1b5;}
-  .event-print-table .church-row td{font-weight:700;background:#9bcf78;}
-  .event-print-spacer{height:5px;border-bottom:1px solid #222;}
-  .event-print-note{font-size:10px;color:#555;margin-top:6px;}
-  .event-print-blank{height:18px;}
-  .event-print-page .empty-row td{height:18px;}
-  @page{size:A4 landscape;margin:8mm;}
+  .statement-table{width:100%;border-collapse:collapse;font-size:0.85rem;}
+  .statement-table th, .statement-table td{padding:7px 9px;border-bottom:1px solid var(--line);}
+  .statement-table thead tr:first-child th{padding:8px 9px;font-family:'Fraunces',serif;font-weight:600;letter-spacing:0.02em;}
+  .statement-table thead tr:last-child th{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);text-align:left;border-bottom:2px solid var(--ink);}
+  .statement-table th.num, .statement-table td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
+  .statement-table th:nth-child(3), .statement-table td:nth-child(3){border-right:2px solid var(--line);}
+  .statement-table tfoot td{font-family:'IBM Plex Mono',monospace;}
 
   @media print{
-    body *{visibility:hidden !important;}
-    #event-print-area, #event-print-area *{visibility:visible !important;}
-    #event-print-area{display:block !important;position:absolute;left:0;top:0;width:100%;}
+    .spine, .page-head .balance-card, .no-print, .logout-link, #current-user-label { display:none !important; }
+    .app{display:block;}
+    .main{padding:0;max-width:100%;}
     body{background:#fff;}
+    .panel{border:none;box-shadow:none;padding:8px 0;}
   }
 
   @media (max-width:800px){
@@ -271,6 +256,17 @@
             <div>
               <label>Category</label>
               <select id="f-category" required></select>
+            </div>
+            <div id="f-bill-wrap" style="display:none;">
+              <label>Bill</label>
+              <select id="f-bill-status">
+                <option value="With Bill">With Bill</option>
+                <option value="Without Bill">Without Bill</option>
+              </select>
+            </div>
+            <div id="f-bill-file-wrap" style="display:none;">
+              <label>Upload Bill</label>
+              <input type="file" id="f-bill-file" accept="image/*,.pdf">
             </div>
             <div>
               <label>Payment Mode</label>
@@ -466,10 +462,12 @@
             <h2 style="display:inline-block;margin:0 0 0 14px;" id="event-detail-title">Event</h2>
             <div class="sub" id="event-detail-dates" style="margin-top:4px;"></div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <span class="tag" id="event-status-tag"></span>
-            <button class="btn secondary" id="event-toggle-status-btn" type="button"></button>
-            <button class="btn secondary" id="event-print-btn" type="button">Print Statement</button>
+            <button class="btn secondary no-print" id="event-toggle-status-btn" type="button"></button>
+            <button class="btn secondary no-print" id="event-print-btn" type="button">Print</button>
+            <button class="btn secondary no-print" id="event-xlsx-btn" type="button">Download XLSX</button>
+            <button class="btn secondary no-print" id="event-pdf-btn" type="button">Download PDF</button>
           </div>
         </div>
 
@@ -479,7 +477,7 @@
           <div class="stat-card"><div class="label">Net</div><div class="val" id="ev-stat-net">₹ 0</div></div>
         </div>
 
-        <div class="panel" id="event-entry-panel">
+        <div class="panel no-print" id="event-entry-panel">
           <h2>Add Entry</h2>
           <form id="event-entry-form">
             <div class="form-grid">
@@ -495,6 +493,13 @@
                   <option value="Expense">Expense</option>
                 </select>
               </div>
+              <div id="ee-bill-wrap" style="display:none;">
+                <label>Bill</label>
+                <select id="ee-bill-status">
+                  <option value="With Bill">With Bill</option>
+                  <option value="Without Bill">Without Bill</option>
+                </select>
+              </div>
               <div>
                 <label>Payment Mode</label>
                 <select id="ee-mode">
@@ -502,14 +507,6 @@
                   <option>UPI</option>
                   <option>Cheque</option>
                   <option>Bank Transfer</option>
-                  <option>Sponsor Item</option>
-                </select>
-              </div>
-              <div id="ee-bill-status-wrap" style="display:none;">
-                <label>Bill Status</label>
-                <select id="ee-bill-status">
-                  <option value="With Bill">With Bill</option>
-                  <option value="Without Bill">Without Bill</option>
                 </select>
               </div>
               <div>
@@ -528,16 +525,17 @@
             <div class="form-actions">
               <button type="submit" class="btn">Add Entry</button>
               <span class="status-msg" id="event-entry-status"></span>
+
             </div>
           </form>
         </div>
 
-        <div class="panel">
+        <div class="panel no-print">
           <h2>Entries</h2>
           <div class="ledger-table-wrap">
             <table>
               <thead>
-                <tr><th>Date</th><th>Type</th><th>Bill</th><th>Description</th><th>Mode</th><th class="num">Amount</th><th class="no-print"></th></tr>
+                <tr><th>Date</th><th>Type</th><th>Description</th><th>Mode</th><th class="num">Amount</th><th class="no-print"></th></tr>
               </thead>
               <tbody id="event-entries-body"></tbody>
             </table>
@@ -547,40 +545,31 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Printable event statement. Populated from the selected event entries. -->
-      <div id="event-print-area">
-        <div class="event-print-page">
-          <div class="event-print-title" id="print-event-title">Breakfast Sales</div>
-          <div class="event-print-grid">
-            <div class="event-print-col">
-              <div class="event-print-section-title">Income</div>
-              <div class="event-print-subtitle">Sponsors (Cash)</div>
-              <table class="event-print-table">
-                <thead><tr><th>S.No</th><th>Name</th><th>Amount</th></tr></thead>
-                <tbody id="print-sponsor-cash-body"></tbody>
-              </table>
-              <div class="event-print-subtitle">Sponsors (Item)</div>
-              <table class="event-print-table">
-                <thead><tr><th>S.No</th><th>Name (Item)</th><th>Cost</th></tr></thead>
-                <tbody id="print-sponsor-item-body"></tbody>
-              </table>
-              <div class="event-print-subtitle" id="print-sales-title">Breakfast Sales</div>
-              <table class="event-print-table">
-                <thead><tr><th>S.No</th><th>Name (Item)</th><th>Cost</th></tr></thead>
-                <tbody id="print-sales-body"></tbody>
-              </table>
-            </div>
-            <div class="event-print-col">
-              <div class="event-print-section-title">Expenditures</div>
-              <table class="event-print-table">
-                <thead><tr><th>S.No</th><th>Item</th><th>Cost</th></tr></thead>
-                <tbody id="print-expense-body"></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="event-print-note" id="print-event-note"></div>
+        <div class="panel" id="event-statement-panel">
+          <h2>Statement</h2>
+          <div class="sub" style="margin-bottom:14px;">Receipts (Income) on the left, Payments (Expenditure) on the right — the totals below are balanced so both sides tally.</div>
+          <table class="statement-table">
+            <thead>
+              <tr>
+                <th colspan="3" style="text-align:center;background:var(--cloth);color:#fff;">Receipts / Income</th>
+                <th colspan="3" style="text-align:center;background:var(--rule-red);color:#fff;">Payments / Expenditure</th>
+              </tr>
+              <tr>
+                <th>Date</th><th>Description</th><th class="num">Amount (₹)</th>
+                <th>Date</th><th>Description</th><th class="num">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="statement-body"></tbody>
+            <tfoot>
+              <tr style="font-weight:700;border-top:3px double var(--ink);">
+                <td colspan="2">Total</td>
+                <td class="num" id="statement-total-income">₹ 0</td>
+                <td colspan="2">Total</td>
+                <td class="num" id="statement-total-expense">₹ 0</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
     </section>
@@ -787,28 +776,81 @@ function fillSelect(id, items, withAll) {
     [...new Set(items)].map(i => `<option value="${i}">${i}</option>`).join('');
   if ([...sel.options].some(o => o.value === current)) sel.value = current;
 }
-document.getElementById('f-type').addEventListener('change', renderCategoryDropdowns);
+document.getElementById('f-type').addEventListener('change', () => {
+  renderCategoryDropdowns();
+  toggleLedgerBillFields();
+});
+
+function toggleLedgerBillFields() {
+  const isExpense = document.getElementById('f-type').value === 'Expense';
+  document.getElementById('f-bill-wrap').style.display = isExpense ? 'block' : 'none';
+  if (!isExpense) {
+    document.getElementById('f-bill-file-wrap').style.display = 'none';
+  } else {
+    toggleLedgerBillFileInput();
+  }
+}
+function toggleLedgerBillFileInput() {
+  const withBill = document.getElementById('f-bill-status').value === 'With Bill';
+  document.getElementById('f-bill-file-wrap').style.display = withBill ? 'block' : 'none';
+}
+document.getElementById('f-bill-status').addEventListener('change', toggleLedgerBillFileInput);
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]); // strip the data: prefix
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 /* ---------- Ledger tab ---------- */
 document.getElementById('entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
+
+  const type = document.getElementById('f-type').value;
+  const billStatus = type === 'Expense' ? document.getElementById('f-bill-status').value : '';
+  const fileInput = document.getElementById('f-bill-file');
+  const file = (type === 'Expense' && billStatus === 'With Bill') ? fileInput.files[0] : null;
+
   const payload = {
     action: 'addEntry',
     date: document.getElementById('f-date').value,
-    type: document.getElementById('f-type').value,
+    type: type,
     category: document.getElementById('f-category').value,
     description: document.getElementById('f-description').value,
     amount: document.getElementById('f-amount').value,
     paymentMode: document.getElementById('f-mode').value,
-    reference: document.getElementById('f-reference').value
+    reference: document.getElementById('f-reference').value,
+    billStatus: billStatus
   };
+
+  if (file) {
+    if (file.size > 8 * 1024 * 1024) {
+      status.textContent = 'Bill file is too large (max ~8MB).'; status.className = 'status-msg err';
+      return;
+    }
+    status.textContent = 'Uploading bill…'; status.className = 'status-msg';
+    try {
+      payload.billFileBase64 = await fileToBase64(file);
+      payload.billFileName = file.name;
+      payload.billFileMimeType = file.type || 'application/octet-stream';
+    } catch (ex) {
+      status.textContent = 'Could not read the selected file.'; status.className = 'status-msg err';
+      return;
+    }
+  }
+
+  status.textContent = 'Saving…'; status.className = 'status-msg';
   const res = await apiPost(payload);
   if (res.ok) {
     status.textContent = 'Entry added.'; status.className = 'status-msg ok';
     e.target.reset();
     document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+    toggleLedgerBillFields();
     await loadAll();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
@@ -847,7 +889,7 @@ function renderLedgerTable() {
       <td>${formatDate(r.Date)}</td>
       <td><span class="tag ${r.Type === 'Income' ? 'income' : 'expense'}">${r.Type}</span></td>
       <td>${r.Category}</td>
-      <td>${r.Description || ''}</td>
+      <td>${r.Description || ''}${r.Type === 'Expense' && r.BillStatus ? ' <span class="tag" style="margin-left:4px;">' + r.BillStatus + '</span>' : ''}${r.BillFileUrl ? ' <a href="' + r.BillFileUrl + '" target="_blank" rel="noopener" style="font-size:0.75rem;">View Bill</a>' : ''}</td>
       <td>${r.PaymentMode || ''}</td>
       <td class="${r.Type === 'Income' ? 'amt-income' : 'amt-expense'}">${r.Type === 'Income' ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
       <td><button class="btn danger" onclick="deleteEntry('${r.ID}')">Delete</button></td>
@@ -1098,7 +1140,6 @@ async function renderEventDetail() {
     <tr>
       <td>${formatDate(r.Date)}</td>
       <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
-      <td>${r.Type === 'Expense' ? (r.BillStatus || '') : ''}</td>
       <td>${r.Description || ''}</td>
       <td>${r.PaymentMode || ''}</td>
       <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
@@ -1107,34 +1148,24 @@ async function renderEventDetail() {
   `).join('');
 }
 
-function toggleEventBillStatus() {
-  const wrap = document.getElementById('ee-bill-status-wrap');
-  wrap.style.display = document.getElementById('ee-type').value === 'Expense' ? 'block' : 'none';
-}
-document.getElementById('ee-type').addEventListener('change', toggleEventBillStatus);
-toggleEventBillStatus();
-
 document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('event-entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
-  const type = document.getElementById('ee-type').value;
   const res = await apiPost({
     action: 'addEventEntry',
     eventId: CURRENT_EVENT_ID,
     date: document.getElementById('ee-date').value,
-    type: type,
+    type: document.getElementById('ee-type').value,
     description: document.getElementById('ee-description').value,
     amount: document.getElementById('ee-amount').value,
     paymentMode: document.getElementById('ee-mode').value,
-    reference: document.getElementById('ee-reference').value,
-    billStatus: type === 'Expense' ? document.getElementById('ee-bill-status').value : ''
+    reference: document.getElementById('ee-reference').value
   });
   if (res.ok) {
     status.textContent = 'Entry added.'; status.className = 'status-msg ok';
     e.target.reset();
     document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
-    toggleEventBillStatus();
     await renderEventDetail();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
@@ -1157,64 +1188,7 @@ document.getElementById('event-toggle-status-btn').addEventListener('click', asy
   await renderEventDetail();
 });
 
-function isSponsorItemEntry(entry) {
-  const mode = String(entry.PaymentMode || '').trim().toLowerCase();
-  return mode === 'sponsor item' || mode === 'item' || mode === 'in-kind' || mode === 'inkind';
-}
-
-function printTableRows(entries, amountLabel, emptyLabel) {
-  if (!entries.length) {
-    return `<tr class=\"empty-row\"><td colspan=\"3\" style=\"text-align:center;color:#777;\">${emptyLabel || ''}</td></tr>`;
-  }
-  return entries.map((r, i) => `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${r.Description || ''}</td>
-      <td>${Number(r.Amount || 0).toLocaleString('en-IN')}</td>
-    </tr>`).join('');
-}
-
-function buildEventPrintStatement() {
-  const ev = STATE.events.find(e => e.ID === CURRENT_EVENT_ID);
-  if (!ev) return false;
-  const entries = STATE.currentEventEntries || [];
-  const sponsorCash = entries.filter(e => e.Type === 'Income-Sponsor' && !isSponsorItemEntry(e));
-  const sponsorItems = entries.filter(e => e.Type === 'Income-Sponsor' && isSponsorItemEntry(e));
-  const sales = entries.filter(e => e.Type === 'Income-Sales' || (e.Type === 'Income' && !isSponsorItemEntry(e)));
-  const expenses = entries.filter(e => e.Type === 'Expense');
-
-  const sponsorCashTotal = sponsorCash.reduce((s,e) => s + Number(e.Amount || 0), 0);
-  const sponsorItemTotal = sponsorItems.reduce((s,e) => s + Number(e.Amount || 0), 0);
-  const salesTotal = sales.reduce((s,e) => s + Number(e.Amount || 0), 0);
-  const expenseTotal = expenses.reduce((s,e) => s + Number(e.Amount || 0), 0);
-  const profit = salesTotal - expenseTotal;
-  const remaining = sponsorCashTotal - expenseTotal;
-  const churchTotal = sponsorCashTotal + profit;
-
-  document.getElementById('print-event-title').textContent = ev.Name || 'Event Statement';
-  document.getElementById('print-sales-title').textContent = `Breakfast Sales${ev.StartDate ? ' - ' + formatDate(ev.StartDate) : ''}`;
-  document.getElementById('print-sponsor-cash-body').innerHTML = printTableRows(sponsorCash, 'Amount', 'No cash sponsors') + `
-    <tr class=\"total-row\"><td></td><td>Total</td><td>${sponsorCashTotal.toLocaleString('en-IN')}</td></tr>`;
-  document.getElementById('print-sponsor-item-body').innerHTML = printTableRows(sponsorItems, 'Cost', 'No item sponsors');
-  document.getElementById('print-sales-body').innerHTML = printTableRows(sales, 'Cost', 'No sales recorded');
-
-  const expenseRows = expenses.length ? expenses.map((r,i) => `
-    <tr><td>${i + 1}</td><td>${r.Description || ''}</td><td>${Number(r.Amount || 0).toLocaleString('en-IN')}</td></tr>`).join('') :
-    `<tr class=\"empty-row\"><td colspan=\"3\" style=\"text-align:center;color:#777;\">No expenditures</td></tr>`;
-  document.getElementById('print-expense-body').innerHTML = expenseRows + `
-    <tr class=\"total-row\"><td></td><td>Total Expenses</td><td>${expenseTotal.toLocaleString('en-IN')}</td></tr>
-    <tr class=\"profit-row\"><td></td><td>Profit</td><td>${profit.toLocaleString('en-IN')}</td></tr>
-    <tr class=\"remaining-row\"><td></td><td>Remaining Amount</td><td>${remaining.toLocaleString('en-IN')}</td></tr>
-    <tr class=\"church-row\"><td></td><td>Total amount paid to church</td><td>${churchTotal.toLocaleString('en-IN')}</td></tr>`;
-
-  document.getElementById('print-event-note').textContent = sponsorItemTotal > 0
-    ? `Item sponsorships recorded separately: ₹ ${sponsorItemTotal.toLocaleString('en-IN')}. Item sponsorships are not included in the cash balance calculations.`
-    : '';
-  return true;
-}
-
-document.getElementById('event-print-btn').addEventListener('click', async () => {
-  if (!buildEventPrintStatement()) return;
+document.getElementById('event-print-btn').addEventListener('click', () => {
   window.print();
 });
 

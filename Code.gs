@@ -20,7 +20,7 @@ const SHEET_EVENT_ENTRIES = 'EventEntries';
 
 const LEDGER_HEADERS = [
   'ID', 'Date', 'Type', 'Category', 'SubCategory', 'Description',
-  'Amount', 'PaymentMode', 'Reference', 'EnteredOn'
+  'Amount', 'PaymentMode', 'Reference', 'EnteredOn', 'BillStatus', 'BillFileUrl'
 ];
 const CATEGORY_HEADERS = ['Type', 'Category'];
 const BUDGET_HEADERS = ['Year', 'Category', 'BudgetedAmount'];
@@ -28,7 +28,7 @@ const USER_HEADERS = ['Username', 'PasswordHash', 'Role', 'CreatedOn'];
 const EVENT_HEADERS = ['ID', 'Name', 'StartDate', 'EndDate', 'Status', 'CreatedOn'];
 const EVENT_ENTRY_HEADERS = [
   'ID', 'EventID', 'Date', 'Type', 'Description', 'Amount',
-  'PaymentMode', 'Reference', 'BillStatus', 'EnteredOn'
+  'PaymentMode', 'Reference', 'EnteredOn', 'BillStatus'
 ];
 
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -46,11 +46,10 @@ function getOrCreateSheet_(name, headers) {
     sheet.setFrozenRows(1);
     return sheet;
   }
-  // migrate: add any new headers that don't exist yet in an existing sheet
-  const lastCol = sheet.getLastColumn();
-  const existingHeaders = lastCol > 0
-    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
-    : [];
+  // migrate: if this sheet already existed (from before a header was added),
+  // append any missing headers as new columns so old data is never disturbed.
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const missing = headers.filter(h => existingHeaders.indexOf(h) === -1);
   if (missing.length > 0) {
     sheet.getRange(1, existingHeaders.length + 1, 1, missing.length).setValues([missing]);
@@ -82,6 +81,31 @@ function jsonOut_(payload) {
 function hashPassword_(password) {
   const raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password, Utilities.Charset.UTF_8);
   return raw.map(b => ((b < 0 ? b + 256 : b).toString(16).padStart(2, '0'))).join('');
+}
+
+/* ---------------- Bill file uploads (stored in Google Drive) ---------------- */
+
+const BILL_DRIVE_FOLDER_NAME = 'CSITA Treasury Bills';
+
+function getOrCreateBillFolder_() {
+  const folders = DriveApp.getFoldersByName(BILL_DRIVE_FOLDER_NAME);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(BILL_DRIVE_FOLDER_NAME);
+}
+
+/**
+ * Saves a base64-encoded bill file to a dedicated Drive folder and returns a
+ * shareable view link. Sharing is set to "anyone with the link can view" so
+ * logged-in dashboard users can open it — this does not make it publicly
+ * searchable or listed, only reachable if someone has the exact link.
+ */
+function saveBillFile_(base64Data, fileName, mimeType) {
+  if (!base64Data) return '';
+  const folder = getOrCreateBillFolder_();
+  const decoded = Utilities.base64Decode(base64Data);
+  const blob = Utilities.newBlob(decoded, mimeType || 'application/octet-stream', fileName || ('bill_' + Date.now()));
+  const file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
 }
 
 /**
@@ -280,19 +304,33 @@ function doPost(e) {
     if (action === 'addEntry') {
       const s = getOrCreateSheet_(SHEET_LEDGER, LEDGER_HEADERS);
       const id = Utilities.getUuid();
-      s.appendRow([
-        id,
-        body.date,
-        body.type,
-        body.category,
-        body.subCategory || '',
-        body.description || '',
-        Number(body.amount),
-        body.paymentMode || '',
-        body.reference || '',
-        new Date()
-      ]);
-      return jsonOut_({ ok: true, id: id });
+      let billFileUrl = '';
+      if (body.type === 'Expense' && body.billStatus === 'With Bill' && body.billFileBase64) {
+        try {
+          billFileUrl = saveBillFile_(body.billFileBase64, body.billFileName, body.billFileMimeType);
+        } catch (fileErr) {
+          // don't fail the whole entry just because the file upload had an issue
+          billFileUrl = '';
+        }
+      }
+      const rowObj = {
+        ID: id,
+        Date: body.date,
+        Type: body.type,
+        Category: body.category,
+        SubCategory: body.subCategory || '',
+        Description: body.description || '',
+        Amount: Number(body.amount),
+        PaymentMode: body.paymentMode || '',
+        Reference: body.reference || '',
+        EnteredOn: new Date(),
+        BillStatus: body.type === 'Expense' ? (body.billStatus || '') : '',
+        BillFileUrl: billFileUrl
+      };
+      const headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
+      const row = headers.map(h => (rowObj[h] !== undefined ? rowObj[h] : ''));
+      s.appendRow(row);
+      return jsonOut_({ ok: true, id: id, billFileUrl: billFileUrl });
     }
 
     if (action === 'deleteEntry') {
@@ -405,18 +443,21 @@ function doPost(e) {
     if (action === 'addEventEntry') {
       const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
       const id = Utilities.getUuid();
-      s.appendRow([
-        id,
-        body.eventId,
-        body.date,
-        body.type, // 'Income' or 'Expense'
-        body.description || '',
-        Number(body.amount),
-        body.paymentMode || '',
-        body.reference || '',
-        body.type === 'Expense' ? (body.billStatus || '') : '',
-        new Date()
-      ]);
+      const rowObj = {
+        ID: id,
+        EventID: body.eventId,
+        Date: body.date,
+        Type: body.type, // 'Income-Sponsor', 'Income-Sales', or 'Expense'
+        Description: body.description || '',
+        Amount: Number(body.amount),
+        PaymentMode: body.paymentMode || '',
+        Reference: body.reference || '',
+        EnteredOn: new Date(),
+        BillStatus: body.billStatus || '' // 'With Bill' / 'Without Bill' — only meaningful for Expense
+      };
+      const headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
+      const row = headers.map(h => (rowObj[h] !== undefined ? rowObj[h] : ''));
+      s.appendRow(row);
       return jsonOut_({ ok: true, id: id });
     }
 
