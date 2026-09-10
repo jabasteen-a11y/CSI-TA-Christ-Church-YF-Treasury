@@ -202,6 +202,9 @@
     .main{padding:20px;}
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
@@ -1133,22 +1136,78 @@ async function renderEventDetail() {
   const body = document.getElementById('event-entries-body');
   const empty = document.getElementById('event-entries-empty');
   if (entries.length === 0) {
-    body.innerHTML = ''; empty.style.display = 'block';
-    return;
+    body.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    const sorted = [...entries].sort((a, b) => new Date(a.Date) - new Date(b.Date));
+    body.innerHTML = sorted.map(r => `
+      <tr>
+        <td>${formatDate(r.Date)}</td>
+        <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
+        <td>${r.Description || ''}</td>
+        <td>${r.PaymentMode || ''}</td>
+        <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
+        <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
+      </tr>
+    `).join('');
   }
-  empty.style.display = 'none';
-  const sorted = [...entries].sort((a, b) => new Date(a.Date) - new Date(b.Date));
-  body.innerHTML = sorted.map(r => `
-    <tr>
-      <td>${formatDate(r.Date)}</td>
-      <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
-      <td>${r.Description || ''}</td>
-      <td>${r.PaymentMode || ''}</td>
-      <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
-      <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
-    </tr>
-  `).join('');
+
+  renderStatementPreview(ev, entries);
 }
+
+/* ---------- Statement (Receipts & Payments style, always balanced) ---------- */
+function buildStatementData(entries) {
+  const incomeEntries = entries
+    .filter(e => isEventIncome(e.Type))
+    .map(e => ({ date: e.Date, description: eventTypeLabel(e.Type) + (e.Description ? ' — ' + e.Description : ''), amount: Number(e.Amount || 0) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const expenseEntries = entries
+    .filter(e => e.Type === 'Expense')
+    .map(e => ({ date: e.Date, description: e.Description || '', amount: Number(e.Amount || 0) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const totalIncome = incomeEntries.reduce((s, e) => s + e.amount, 0);
+  const totalExpense = expenseEntries.reduce((s, e) => s + e.amount, 0);
+
+  const incomeRows = [...incomeEntries];
+  const expenseRows = [...expenseEntries];
+
+  if (totalIncome > totalExpense) {
+    expenseRows.push({ date: '', description: 'Balance (unspent, carried forward)', amount: totalIncome - totalExpense, balancing: true });
+  } else if (totalExpense > totalIncome) {
+    incomeRows.push({ date: '', description: 'Balance (shortfall, needs reimbursement)', amount: totalExpense - totalIncome, balancing: true });
+  }
+
+  const grandTotal = Math.max(totalIncome, totalExpense);
+  return { incomeRows, expenseRows, grandTotal, totalIncome, totalExpense };
+}
+
+function renderStatementPreview(ev, entries) {
+  const data = buildStatementData(entries);
+  STATE.currentStatementData = data;
+  STATE.currentStatementEvent = ev;
+
+  const rowCount = Math.max(data.incomeRows.length, data.expenseRows.length, 1);
+  let rowsHtml = '';
+  for (let i = 0; i < rowCount; i++) {
+    const inc = data.incomeRows[i];
+    const exp = data.expenseRows[i];
+    rowsHtml += `<tr>
+      <td>${inc && inc.date ? formatDate(inc.date) : ''}</td>
+      <td>${inc ? inc.description : ''}</td>
+      <td class="num">${inc ? Number(inc.amount).toLocaleString('en-IN') : ''}</td>
+      <td>${exp && exp.date ? formatDate(exp.date) : ''}</td>
+      <td>${exp ? exp.description : ''}</td>
+      <td class="num">${exp ? Number(exp.amount).toLocaleString('en-IN') : ''}</td>
+    </tr>`;
+  }
+  document.getElementById('statement-body').innerHTML = rowsHtml;
+  document.getElementById('statement-total-income').textContent = formatINR(data.grandTotal);
+  document.getElementById('statement-total-expense').textContent = formatINR(data.grandTotal);
+}
+
 
 document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1192,6 +1251,95 @@ document.getElementById('event-toggle-status-btn').addEventListener('click', asy
 
 document.getElementById('event-print-btn').addEventListener('click', () => {
   window.print();
+});
+
+function safeFileSlug(name) {
+  return (name || 'Statement').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'Statement';
+}
+
+document.getElementById('event-xlsx-btn').addEventListener('click', () => {
+  const ev = STATE.currentStatementEvent;
+  const data = STATE.currentStatementData;
+  if (!ev || !data) return;
+
+  const rowCount = Math.max(data.incomeRows.length, data.expenseRows.length, 1);
+  const aoa = [];
+  aoa.push([ev.Name]);
+  const dateRange = (ev.StartDate ? formatDate(ev.StartDate) : '') + (ev.EndDate ? ' to ' + formatDate(ev.EndDate) : '');
+  aoa.push(['CSITA Christ Church, Gandhinagar' + (dateRange ? ' — ' + dateRange : '')]);
+  aoa.push([]);
+  aoa.push(['RECEIPTS / INCOME', '', '', 'PAYMENTS / EXPENDITURE', '', '']);
+  aoa.push(['Date', 'Description', 'Amount (Rs.)', 'Date', 'Description', 'Amount (Rs.)']);
+  for (let i = 0; i < rowCount; i++) {
+    const inc = data.incomeRows[i];
+    const exp = data.expenseRows[i];
+    aoa.push([
+      inc && inc.date ? formatDate(inc.date) : '',
+      inc ? inc.description : '',
+      inc ? inc.amount : '',
+      exp && exp.date ? formatDate(exp.date) : '',
+      exp ? exp.description : '',
+      exp ? exp.amount : ''
+    ]);
+  }
+  aoa.push(['', 'TOTAL', data.grandTotal, '', 'TOTAL', data.grandTotal]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 12 }, { wch: 30 }, { wch: 14 }, { wch: 12 }, { wch: 30 }, { wch: 14 }];
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } },
+    { s: { r: 3, c: 3 }, e: { r: 3, c: 5 } }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Statement');
+  XLSX.writeFile(wb, safeFileSlug(ev.Name) + '_Statement.xlsx');
+});
+
+document.getElementById('event-pdf-btn').addEventListener('click', () => {
+  const ev = STATE.currentStatementEvent;
+  const data = STATE.currentStatementData;
+  if (!ev || !data) return;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+  doc.setFontSize(14);
+  doc.text(ev.Name, 14, 15);
+  doc.setFontSize(10);
+  const dateRange = (ev.StartDate ? formatDate(ev.StartDate) : '') + (ev.EndDate ? ' to ' + formatDate(ev.EndDate) : '');
+  doc.text('CSITA Christ Church, Gandhinagar' + (dateRange ? ' — ' + dateRange : ''), 14, 21);
+
+  const rowCount = Math.max(data.incomeRows.length, data.expenseRows.length, 1);
+  const body = [];
+  for (let i = 0; i < rowCount; i++) {
+    const inc = data.incomeRows[i];
+    const exp = data.expenseRows[i];
+    body.push([
+      inc && inc.date ? formatDate(inc.date) : '',
+      inc ? inc.description : '',
+      inc ? Number(inc.amount).toLocaleString('en-IN') : '',
+      exp && exp.date ? formatDate(exp.date) : '',
+      exp ? exp.description : '',
+      exp ? Number(exp.amount).toLocaleString('en-IN') : ''
+    ]);
+  }
+  const totalStr = 'Rs. ' + Number(data.grandTotal).toLocaleString('en-IN');
+
+  doc.autoTable({
+    startY: 27,
+    head: [
+      [{ content: 'Receipts / Income', colSpan: 3, styles: { halign: 'center', fillColor: [47, 82, 51], textColor: 255 } },
+       { content: 'Payments / Expenditure', colSpan: 3, styles: { halign: 'center', fillColor: [178, 58, 46], textColor: 255 } }],
+      ['Date', 'Description', 'Amount (Rs.)', 'Date', 'Description', 'Amount (Rs.)']
+    ],
+    body: body,
+    foot: [['', 'TOTAL', totalStr, '', 'TOTAL', totalStr]],
+    styles: { fontSize: 9 },
+    footStyles: { fillColor: [245, 241, 230], textColor: [27, 42, 68], fontStyle: 'bold' }
+  });
+
+  doc.save(safeFileSlug(ev.Name) + '_Statement.pdf');
 });
 
 document.querySelector('[data-tab="events"]').addEventListener('click', () => {
