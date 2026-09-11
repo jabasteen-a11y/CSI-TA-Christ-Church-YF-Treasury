@@ -373,18 +373,52 @@ function doPost(e) {
     if (action === 'updateEntry') {
       const s = getOrCreateSheet_(SHEET_LEDGER, LEDGER_HEADERS);
       const values = s.getDataRange().getValues();
+      const headers = values[0];
+      const billUrlCol = headers.indexOf('BillFileUrl');
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === body.id) {
-          const row = i + 1;
-          s.getRange(row, 2, 1, 9).setValues([[
-            body.date, body.type, body.category, body.subCategory || '',
-            body.description || '', Number(body.amount), body.paymentMode || '',
-            body.reference || '', values[i][9]
-          ]]);
-          break;
+          let billFileUrl = billUrlCol !== -1 ? (values[i][billUrlCol] || '') : '';
+          let billUploadWarning = '';
+          const isExpense = body.type === 'Expense';
+
+          if (isExpense && body.billStatus === 'With Bill' && body.billFileBase64) {
+            // a new file was chosen — replace whatever was there before
+            if (billFileUrl) deleteBillFileByUrl_(billFileUrl);
+            try {
+              billFileUrl = saveBillFile_(body.billFileBase64, body.billFileName, body.billFileMimeType);
+            } catch (fileErr) {
+              billUploadWarning = 'Entry updated, but the new bill file could not be uploaded: ' + fileErr.message;
+            }
+          } else if (!isExpense || body.billStatus === 'Without Bill') {
+            // no longer an expense, or explicitly marked without a bill — drop any old file
+            if (billFileUrl) {
+              deleteBillFileByUrl_(billFileUrl);
+              billFileUrl = '';
+            }
+          }
+
+          const rowObj = {
+            Date: body.date,
+            Type: body.type,
+            Category: body.category,
+            SubCategory: body.subCategory || '',
+            Description: body.description || '',
+            Amount: Number(body.amount),
+            PaymentMode: body.paymentMode || '',
+            Reference: body.reference || '',
+            BillStatus: isExpense ? (body.billStatus || '') : '',
+            BillFileUrl: billFileUrl
+          };
+          headers.forEach((h, idx) => {
+            if (h === 'ID' || h === 'EnteredOn') return; // never touched on edit
+            if (rowObj[h] !== undefined) {
+              s.getRange(i + 1, idx + 1).setValue(rowObj[h]);
+            }
+          });
+          return jsonOut_({ ok: true, billFileUrl: billFileUrl, warning: billUploadWarning });
         }
       }
-      return jsonOut_({ ok: true });
+      return jsonOut_({ ok: false, error: 'Entry not found.' });
     }
 
     if (action === 'addCategory') {
@@ -500,6 +534,53 @@ function doPost(e) {
       const row = headers.map(h => (rowObj[h] !== undefined ? rowObj[h] : ''));
       s.appendRow(row);
       return jsonOut_({ ok: true, id: id, billFileUrl: billFileUrl, warning: billUploadWarning });
+    }
+
+    if (action === 'updateEventEntry') {
+      const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
+      const values = s.getDataRange().getValues();
+      const headers = values[0];
+      const billUrlCol = headers.indexOf('BillFileUrl');
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === body.id) {
+          let billFileUrl = billUrlCol !== -1 ? (values[i][billUrlCol] || '') : '';
+          let billUploadWarning = '';
+          const isExpense = body.type === 'Expense';
+
+          if (isExpense && body.billStatus === 'With Bill' && body.billFileBase64) {
+            if (billFileUrl) deleteBillFileByUrl_(billFileUrl);
+            try {
+              billFileUrl = saveBillFile_(body.billFileBase64, body.billFileName, body.billFileMimeType);
+            } catch (fileErr) {
+              billUploadWarning = 'Entry updated, but the new bill file could not be uploaded: ' + fileErr.message;
+            }
+          } else if (!isExpense || body.billStatus === 'Without Bill') {
+            if (billFileUrl) {
+              deleteBillFileByUrl_(billFileUrl);
+              billFileUrl = '';
+            }
+          }
+
+          const rowObj = {
+            Date: body.date,
+            Type: body.type,
+            Description: body.description || '',
+            Amount: Number(body.amount),
+            PaymentMode: body.paymentMode || '',
+            Reference: body.reference || '',
+            BillStatus: isExpense ? (body.billStatus || '') : '',
+            BillFileUrl: billFileUrl
+          };
+          headers.forEach((h, idx) => {
+            if (h === 'ID' || h === 'EventID' || h === 'EnteredOn') return; // never touched on edit
+            if (rowObj[h] !== undefined) {
+              s.getRange(i + 1, idx + 1).setValue(rowObj[h]);
+            }
+          });
+          return jsonOut_({ ok: true, billFileUrl: billFileUrl, warning: billUploadWarning });
+        }
+      }
+      return jsonOut_({ ok: false, error: 'Entry not found.' });
     }
 
     if (action === 'deleteEventEntry') {

@@ -242,8 +242,9 @@
     <!-- ================= LEDGER ================= -->
     <section id="tab-ledger" class="active">
       <div class="panel">
-        <h2>New Entry</h2>
+        <h2 id="entry-form-title">New Entry</h2>
         <form id="entry-form">
+          <input type="hidden" id="f-edit-id" value="">
           <div class="form-grid">
             <div>
               <label>Date</label>
@@ -270,6 +271,7 @@
             <div id="f-bill-file-wrap" style="display:none;">
               <label>Upload Bill</label>
               <input type="file" id="f-bill-file" accept="image/*,.pdf">
+              <div class="status-msg" id="f-bill-current-note" style="margin-top:4px;"></div>
             </div>
             <div>
               <label>Payment Mode</label>
@@ -294,7 +296,8 @@
             </div>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn">Add Entry</button>
+            <button type="submit" class="btn" id="entry-submit-btn">Add Entry</button>
+            <button type="button" class="btn secondary" id="entry-cancel-edit-btn" style="display:none;">Cancel</button>
             <span class="status-msg" id="entry-status"></span>
           </div>
         </form>
@@ -481,8 +484,9 @@
         </div>
 
         <div class="panel no-print" id="event-entry-panel">
-          <h2>Add Entry</h2>
+          <h2 id="event-entry-form-title">Add Entry</h2>
           <form id="event-entry-form">
+            <input type="hidden" id="ee-edit-id" value="">
             <div class="form-grid">
               <div>
                 <label>Date</label>
@@ -507,6 +511,7 @@
               <div id="ee-bill-file-wrap" style="display:none;">
                 <label>Upload Bill</label>
                 <input type="file" id="ee-bill-file" accept="image/*,.pdf">
+                <div class="status-msg" id="ee-bill-current-note" style="margin-top:4px;"></div>
               </div>
               <div>
                 <label>Payment Mode</label>
@@ -531,7 +536,8 @@
               </div>
             </div>
             <div class="form-actions">
-              <button type="submit" class="btn">Add Entry</button>
+              <button type="submit" class="btn" id="event-entry-submit-btn">Add Entry</button>
+              <button type="button" class="btn secondary" id="event-entry-cancel-edit-btn" style="display:none;">Cancel</button>
               <span class="status-msg" id="event-entry-status"></span>
 
             </div>
@@ -814,18 +820,67 @@ function fileToBase64(file) {
 }
 
 /* ---------- Ledger tab ---------- */
+function resetEntryForm() {
+  document.getElementById('entry-form').reset();
+  document.getElementById('f-edit-id').value = '';
+  document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('entry-form-title').textContent = 'New Entry';
+  document.getElementById('entry-submit-btn').textContent = 'Add Entry';
+  document.getElementById('entry-cancel-edit-btn').style.display = 'none';
+  document.getElementById('f-bill-current-note').textContent = '';
+  toggleLedgerBillFields();
+}
+
+function startEditEntry(id) {
+  const entry = STATE.ledger.find(r => r.ID === id);
+  if (!entry) return;
+
+  document.getElementById('f-edit-id').value = id;
+  document.getElementById('f-date').value = String(entry.Date).slice(0, 10);
+  document.getElementById('f-type').value = entry.Type;
+  renderCategoryDropdowns();
+  document.getElementById('f-category').value = entry.Category;
+  document.getElementById('f-mode').value = entry.PaymentMode || 'Cash';
+  document.getElementById('f-amount').value = entry.Amount;
+  document.getElementById('f-reference').value = entry.Reference || '';
+  document.getElementById('f-description').value = entry.Description || '';
+
+  toggleLedgerBillFields();
+  const note = document.getElementById('f-bill-current-note');
+  if (entry.Type === 'Expense') {
+    document.getElementById('f-bill-status').value = entry.BillStatus || 'With Bill';
+    toggleLedgerBillFileInput();
+    if (entry.BillFileUrl) {
+      note.innerHTML = 'Current bill: <a href="' + entry.BillFileUrl + '" target="_blank" rel="noopener">View</a> — leave the file blank to keep it, or choose a new file to replace it.';
+    } else {
+      note.textContent = '';
+    }
+  } else {
+    note.textContent = '';
+  }
+
+  document.getElementById('entry-form-title').textContent = 'Edit Entry';
+  document.getElementById('entry-submit-btn').textContent = 'Update Entry';
+  document.getElementById('entry-cancel-edit-btn').style.display = 'inline-block';
+  document.getElementById('entry-status').textContent = '';
+  document.getElementById('entry-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('entry-cancel-edit-btn').addEventListener('click', resetEntryForm);
+
 document.getElementById('entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
 
+  const editId = document.getElementById('f-edit-id').value;
   const type = document.getElementById('f-type').value;
   const billStatus = type === 'Expense' ? document.getElementById('f-bill-status').value : '';
   const fileInput = document.getElementById('f-bill-file');
   const file = (type === 'Expense' && billStatus === 'With Bill') ? fileInput.files[0] : null;
 
   const payload = {
-    action: 'addEntry',
+    action: editId ? 'updateEntry' : 'addEntry',
     date: document.getElementById('f-date').value,
     type: type,
     category: document.getElementById('f-category').value,
@@ -835,6 +890,7 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
     reference: document.getElementById('f-reference').value,
     billStatus: billStatus
   };
+  if (editId) payload.id = editId;
 
   if (file) {
     if (file.size > 8 * 1024 * 1024) {
@@ -858,11 +914,9 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
     if (res.warning) {
       status.textContent = res.warning; status.className = 'status-msg err';
     } else {
-      status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+      status.textContent = editId ? 'Entry updated.' : 'Entry added.'; status.className = 'status-msg ok';
     }
-    e.target.reset();
-    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
-    toggleLedgerBillFields();
+    resetEntryForm();
     await loadAll();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
@@ -904,7 +958,7 @@ function renderLedgerTable() {
       <td>${r.Description || ''}${r.Type === 'Expense' && r.BillStatus ? ' <span class="tag" style="margin-left:4px;">' + r.BillStatus + '</span>' : ''}${r.BillFileUrl ? ' <a href="' + r.BillFileUrl + '" target="_blank" rel="noopener" style="font-size:0.75rem;">View Bill</a>' : ''}</td>
       <td>${r.PaymentMode || ''}</td>
       <td class="${r.Type === 'Income' ? 'amt-income' : 'amt-expense'}">${r.Type === 'Income' ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
-      <td><button class="btn danger" onclick="deleteEntry('${r.ID}')">Delete</button></td>
+      <td><button class="btn secondary" style="margin-right:6px;" onclick="startEditEntry('${r.ID}')">Edit</button><button class="btn danger" onclick="deleteEntry('${r.ID}')">Delete</button></td>
     </tr>
   `).join('');
 }
@@ -1157,7 +1211,7 @@ async function renderEventDetail() {
         <td>${r.Description || ''}${r.Type === 'Expense' && r.BillStatus ? ' <span class="tag" style="margin-left:4px;">' + r.BillStatus + '</span>' : ''}${r.BillFileUrl ? ' <a href="' + r.BillFileUrl + '" target="_blank" rel="noopener" style="font-size:0.75rem;">View Bill</a>' : ''}</td>
         <td>${r.PaymentMode || ''}</td>
         <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
-        <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
+        <td class="no-print"><button class="btn secondary" style="margin-right:6px;" onclick="startEditEventEntry('${r.ID}')">Edit</button><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
       </tr>
     `).join('');
   }
@@ -1235,18 +1289,65 @@ function toggleEventBillFileInput() {
   document.getElementById('ee-bill-file-wrap').style.display = withBill ? 'block' : 'none';
 }
 
+function resetEventEntryForm() {
+  document.getElementById('event-entry-form').reset();
+  document.getElementById('ee-edit-id').value = '';
+  document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('event-entry-form-title').textContent = 'Add Entry';
+  document.getElementById('event-entry-submit-btn').textContent = 'Add Entry';
+  document.getElementById('event-entry-cancel-edit-btn').style.display = 'none';
+  document.getElementById('ee-bill-current-note').textContent = '';
+  toggleEventBillFields();
+}
+
+function startEditEventEntry(id) {
+  const entry = (STATE.currentEventEntries || []).find(r => r.ID === id);
+  if (!entry) return;
+
+  document.getElementById('ee-edit-id').value = id;
+  document.getElementById('ee-date').value = String(entry.Date).slice(0, 10);
+  document.getElementById('ee-type').value = entry.Type;
+  document.getElementById('ee-mode').value = entry.PaymentMode || 'Cash';
+  document.getElementById('ee-amount').value = entry.Amount;
+  document.getElementById('ee-reference').value = entry.Reference || '';
+  document.getElementById('ee-description').value = entry.Description || '';
+
+  toggleEventBillFields();
+  const note = document.getElementById('ee-bill-current-note');
+  if (entry.Type === 'Expense') {
+    document.getElementById('ee-bill-status').value = entry.BillStatus || 'With Bill';
+    toggleEventBillFileInput();
+    if (entry.BillFileUrl) {
+      note.innerHTML = 'Current bill: <a href="' + entry.BillFileUrl + '" target="_blank" rel="noopener">View</a> — leave the file blank to keep it, or choose a new file to replace it.';
+    } else {
+      note.textContent = '';
+    }
+  } else {
+    note.textContent = '';
+  }
+
+  document.getElementById('event-entry-form-title').textContent = 'Edit Entry';
+  document.getElementById('event-entry-submit-btn').textContent = 'Update Entry';
+  document.getElementById('event-entry-cancel-edit-btn').style.display = 'inline-block';
+  document.getElementById('event-entry-status').textContent = '';
+  document.getElementById('event-entry-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('event-entry-cancel-edit-btn').addEventListener('click', resetEventEntryForm);
+
 document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('event-entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
 
+  const editId = document.getElementById('ee-edit-id').value;
   const type = document.getElementById('ee-type').value;
   const billStatus = type === 'Expense' ? document.getElementById('ee-bill-status').value : '';
   const fileInput = document.getElementById('ee-bill-file');
   const file = (type === 'Expense' && billStatus === 'With Bill') ? fileInput.files[0] : null;
 
   const payload = {
-    action: 'addEventEntry',
+    action: editId ? 'updateEventEntry' : 'addEventEntry',
     eventId: CURRENT_EVENT_ID,
     date: document.getElementById('ee-date').value,
     type: type,
@@ -1256,6 +1357,7 @@ document.getElementById('event-entry-form').addEventListener('submit', async (e)
     reference: document.getElementById('ee-reference').value,
     billStatus: billStatus
   };
+  if (editId) payload.id = editId;
 
   if (file) {
     if (file.size > 8 * 1024 * 1024) {
@@ -1279,11 +1381,9 @@ document.getElementById('event-entry-form').addEventListener('submit', async (e)
     if (res.warning) {
       status.textContent = res.warning; status.className = 'status-msg err';
     } else {
-      status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+      status.textContent = editId ? 'Entry updated.' : 'Entry added.'; status.className = 'status-msg ok';
     }
-    e.target.reset();
-    document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
-    toggleEventBillFields();
+    resetEventEntryForm();
     await renderEventDetail();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';
