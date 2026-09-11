@@ -851,7 +851,26 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
   status.textContent = 'Saving…'; status.className = 'status-msg';
   const res = await apiPost(payload);
   if (res.ok) {
-    status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    // TEMPORARY DIAGNOSTIC — shows exactly what was sent/returned for bill uploads.
+    // Safe to leave in; only appears when you try to upload a bill.
+    const debugBits = [];
+    if (payload.billFileBase64) {
+      debugBits.push('sent ' + payload.billFileBase64.length + ' chars of file data');
+    } else if (type === 'Expense' && billStatus === 'With Bill') {
+      debugBits.push('NO FILE DATA WAS SENT (file input was likely empty)');
+    }
+    if (payload.billFileBase64) {
+      debugBits.push('server returned billFileUrl: ' + (res.billFileUrl ? res.billFileUrl : 'EMPTY'));
+      debugBits.push('server warning: ' + (res.warning ? res.warning : 'none'));
+    }
+    if (res.warning) {
+      status.textContent = res.warning; status.className = 'status-msg err';
+    } else if (debugBits.length > 0) {
+      status.textContent = 'Entry added. [DEBUG: ' + debugBits.join(' | ') + ']';
+      status.className = 'status-msg ' + (payload.billFileBase64 && res.billFileUrl ? 'ok' : 'err');
+    } else {
+      status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    }
     e.target.reset();
     document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
     toggleLedgerBillFields();
