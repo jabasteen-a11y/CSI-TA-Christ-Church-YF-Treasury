@@ -504,6 +504,10 @@
                   <option value="Without Bill">Without Bill</option>
                 </select>
               </div>
+              <div id="ee-bill-file-wrap" style="display:none;">
+                <label>Upload Bill</label>
+                <input type="file" id="ee-bill-file" accept="image/*,.pdf">
+              </div>
               <div>
                 <label>Payment Mode</label>
                 <select id="ee-mode">
@@ -851,23 +855,8 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
   status.textContent = 'Saving…'; status.className = 'status-msg';
   const res = await apiPost(payload);
   if (res.ok) {
-    // TEMPORARY DIAGNOSTIC — shows exactly what was sent/returned for bill uploads.
-    // Safe to leave in; only appears when you try to upload a bill.
-    const debugBits = [];
-    if (payload.billFileBase64) {
-      debugBits.push('sent ' + payload.billFileBase64.length + ' chars of file data');
-    } else if (type === 'Expense' && billStatus === 'With Bill') {
-      debugBits.push('NO FILE DATA WAS SENT (file input was likely empty)');
-    }
-    if (payload.billFileBase64) {
-      debugBits.push('server returned billFileUrl: ' + (res.billFileUrl ? res.billFileUrl : 'EMPTY'));
-      debugBits.push('server warning: ' + (res.warning ? res.warning : 'none'));
-    }
     if (res.warning) {
       status.textContent = res.warning; status.className = 'status-msg err';
-    } else if (debugBits.length > 0) {
-      status.textContent = 'Entry added. [DEBUG: ' + debugBits.join(' | ') + ']';
-      status.className = 'status-msg ' + (payload.billFileBase64 && res.billFileUrl ? 'ok' : 'err');
     } else {
       status.textContent = 'Entry added.'; status.className = 'status-msg ok';
     }
@@ -1139,6 +1128,7 @@ async function renderEventDetail() {
   document.getElementById('event-entry-panel').style.display = ev.Status === 'Closed' ? 'none' : 'block';
 
   document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+  toggleEventBillFields();
 
   const res = await apiGet('eventEntries', { eventId: CURRENT_EVENT_ID });
   const entries = res.ok ? (res.data || []) : [];
@@ -1164,7 +1154,7 @@ async function renderEventDetail() {
       <tr>
         <td>${formatDate(r.Date)}</td>
         <td><span class="tag ${isEventIncome(r.Type) ? 'income' : 'expense'}">${eventTypeLabel(r.Type)}</span></td>
-        <td>${r.Description || ''}</td>
+        <td>${r.Description || ''}${r.Type === 'Expense' && r.BillStatus ? ' <span class="tag" style="margin-left:4px;">' + r.BillStatus + '</span>' : ''}${r.BillFileUrl ? ' <a href="' + r.BillFileUrl + '" target="_blank" rel="noopener" style="font-size:0.75rem;">View Bill</a>' : ''}</td>
         <td>${r.PaymentMode || ''}</td>
         <td class="${isEventIncome(r.Type) ? 'amt-income' : 'amt-expense'}">${isEventIncome(r.Type) ? '+' : '−'} ${Number(r.Amount).toLocaleString('en-IN')}</td>
         <td class="no-print"><button class="btn danger" onclick="deleteEventEntry('${r.ID}')">Delete</button></td>
@@ -1228,24 +1218,72 @@ function renderStatementPreview(ev, entries) {
 }
 
 
+document.getElementById('ee-type').addEventListener('change', toggleEventBillFields);
+document.getElementById('ee-bill-status').addEventListener('change', toggleEventBillFileInput);
+
+function toggleEventBillFields() {
+  const isExpense = document.getElementById('ee-type').value === 'Expense';
+  document.getElementById('ee-bill-wrap').style.display = isExpense ? 'block' : 'none';
+  if (!isExpense) {
+    document.getElementById('ee-bill-file-wrap').style.display = 'none';
+  } else {
+    toggleEventBillFileInput();
+  }
+}
+function toggleEventBillFileInput() {
+  const withBill = document.getElementById('ee-bill-status').value === 'With Bill';
+  document.getElementById('ee-bill-file-wrap').style.display = withBill ? 'block' : 'none';
+}
+
 document.getElementById('event-entry-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('event-entry-status');
   status.textContent = 'Saving…'; status.className = 'status-msg';
-  const res = await apiPost({
+
+  const type = document.getElementById('ee-type').value;
+  const billStatus = type === 'Expense' ? document.getElementById('ee-bill-status').value : '';
+  const fileInput = document.getElementById('ee-bill-file');
+  const file = (type === 'Expense' && billStatus === 'With Bill') ? fileInput.files[0] : null;
+
+  const payload = {
     action: 'addEventEntry',
     eventId: CURRENT_EVENT_ID,
     date: document.getElementById('ee-date').value,
-    type: document.getElementById('ee-type').value,
+    type: type,
     description: document.getElementById('ee-description').value,
     amount: document.getElementById('ee-amount').value,
     paymentMode: document.getElementById('ee-mode').value,
-    reference: document.getElementById('ee-reference').value
-  });
+    reference: document.getElementById('ee-reference').value,
+    billStatus: billStatus
+  };
+
+  if (file) {
+    if (file.size > 8 * 1024 * 1024) {
+      status.textContent = 'Bill file is too large (max ~8MB).'; status.className = 'status-msg err';
+      return;
+    }
+    status.textContent = 'Uploading bill…'; status.className = 'status-msg';
+    try {
+      payload.billFileBase64 = await fileToBase64(file);
+      payload.billFileName = file.name;
+      payload.billFileMimeType = file.type || 'application/octet-stream';
+    } catch (ex) {
+      status.textContent = 'Could not read the selected file.'; status.className = 'status-msg err';
+      return;
+    }
+  }
+
+  status.textContent = 'Saving…'; status.className = 'status-msg';
+  const res = await apiPost(payload);
   if (res.ok) {
-    status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    if (res.warning) {
+      status.textContent = res.warning; status.className = 'status-msg err';
+    } else {
+      status.textContent = 'Entry added.'; status.className = 'status-msg ok';
+    }
     e.target.reset();
     document.getElementById('ee-date').value = new Date().toISOString().slice(0, 10);
+    toggleEventBillFields();
     await renderEventDetail();
   } else {
     status.textContent = 'Error: ' + res.error; status.className = 'status-msg err';

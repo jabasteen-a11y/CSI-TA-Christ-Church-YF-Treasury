@@ -28,7 +28,7 @@ const USER_HEADERS = ['Username', 'PasswordHash', 'Role', 'CreatedOn'];
 const EVENT_HEADERS = ['ID', 'Name', 'StartDate', 'EndDate', 'Status', 'CreatedOn'];
 const EVENT_ENTRY_HEADERS = [
   'ID', 'EventID', 'Date', 'Type', 'Description', 'Amount',
-  'PaymentMode', 'Reference', 'EnteredOn', 'BillStatus'
+  'PaymentMode', 'Reference', 'EnteredOn', 'BillStatus', 'BillFileUrl'
 ];
 
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -106,6 +106,23 @@ function saveBillFile_(base64Data, fileName, mimeType) {
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
+}
+
+/**
+ * Moves a previously-uploaded bill file to Trash, given the Drive URL stored
+ * on the ledger/event row. Safe to call with an empty/missing URL, and safe
+ * if the file was already removed — never blocks the entry deletion itself.
+ */
+function deleteBillFileByUrl_(url) {
+  if (!url) return;
+  try {
+    const match = String(url).match(/[-\w]{25,}/); // pulls the file ID out of the Drive URL
+    if (match) {
+      DriveApp.getFileById(match[0]).setTrashed(true);
+    }
+  } catch (err) {
+    // file already gone, or some other transient issue — not worth failing the delete over
+  }
 }
 
 /**
@@ -305,12 +322,15 @@ function doPost(e) {
       const s = getOrCreateSheet_(SHEET_LEDGER, LEDGER_HEADERS);
       const id = Utilities.getUuid();
       let billFileUrl = '';
+      let billUploadWarning = '';
       if (body.type === 'Expense' && body.billStatus === 'With Bill' && body.billFileBase64) {
         try {
           billFileUrl = saveBillFile_(body.billFileBase64, body.billFileName, body.billFileMimeType);
         } catch (fileErr) {
-          // don't fail the whole entry just because the file upload had an issue
+          // don't fail the whole entry just because the file upload had an issue —
+          // but tell the caller so it isn't a silent, invisible failure
           billFileUrl = '';
+          billUploadWarning = 'Entry saved, but the bill file could not be uploaded: ' + fileErr.message;
         }
       }
       const rowObj = {
@@ -330,14 +350,19 @@ function doPost(e) {
       const headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
       const row = headers.map(h => (rowObj[h] !== undefined ? rowObj[h] : ''));
       s.appendRow(row);
-      return jsonOut_({ ok: true, id: id, billFileUrl: billFileUrl });
+      return jsonOut_({ ok: true, id: id, billFileUrl: billFileUrl, warning: billUploadWarning });
     }
 
     if (action === 'deleteEntry') {
       const s = getOrCreateSheet_(SHEET_LEDGER, LEDGER_HEADERS);
       const values = s.getDataRange().getValues();
+      const headers = values[0];
+      const billUrlCol = headers.indexOf('BillFileUrl');
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === body.id) {
+          if (billUrlCol !== -1 && values[i][billUrlCol]) {
+            deleteBillFileByUrl_(values[i][billUrlCol]);
+          }
           s.deleteRow(i + 1);
           break;
         }
@@ -429,11 +454,16 @@ function doPost(e) {
           break;
         }
       }
-      // cascade: remove this event's entries too
+      // cascade: remove this event's entries too, and any bill files they had
       const es = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
       const evalues = es.getDataRange().getValues();
+      const eHeaders = evalues[0];
+      const eBillUrlCol = eHeaders.indexOf('BillFileUrl');
       for (let i = evalues.length - 1; i >= 1; i--) {
         if (evalues[i][1] === body.id) {
+          if (eBillUrlCol !== -1 && evalues[i][eBillUrlCol]) {
+            deleteBillFileByUrl_(evalues[i][eBillUrlCol]);
+          }
           es.deleteRow(i + 1);
         }
       }
@@ -443,29 +473,45 @@ function doPost(e) {
     if (action === 'addEventEntry') {
       const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
       const id = Utilities.getUuid();
+      let billFileUrl = '';
+      let billUploadWarning = '';
+      if (body.type === 'Expense' && body.billStatus === 'With Bill' && body.billFileBase64) {
+        try {
+          billFileUrl = saveBillFile_(body.billFileBase64, body.billFileName, body.billFileMimeType);
+        } catch (fileErr) {
+          billFileUrl = '';
+          billUploadWarning = 'Entry saved, but the bill file could not be uploaded: ' + fileErr.message;
+        }
+      }
       const rowObj = {
         ID: id,
         EventID: body.eventId,
         Date: body.date,
-        Type: body.type, // 'Income-Sponsor', 'Income-Sales', or 'Expense'
+        Type: body.type, // 'Income-Advance', 'Income-Sponsor', 'Income-Sales', or 'Expense'
         Description: body.description || '',
         Amount: Number(body.amount),
         PaymentMode: body.paymentMode || '',
         Reference: body.reference || '',
         EnteredOn: new Date(),
-        BillStatus: body.billStatus || '' // 'With Bill' / 'Without Bill' — only meaningful for Expense
+        BillStatus: body.type === 'Expense' ? (body.billStatus || '') : '', // 'With Bill' / 'Without Bill'
+        BillFileUrl: billFileUrl
       };
       const headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
       const row = headers.map(h => (rowObj[h] !== undefined ? rowObj[h] : ''));
       s.appendRow(row);
-      return jsonOut_({ ok: true, id: id });
+      return jsonOut_({ ok: true, id: id, billFileUrl: billFileUrl, warning: billUploadWarning });
     }
 
     if (action === 'deleteEventEntry') {
       const s = getOrCreateSheet_(SHEET_EVENT_ENTRIES, EVENT_ENTRY_HEADERS);
       const values = s.getDataRange().getValues();
+      const headers = values[0];
+      const billUrlCol = headers.indexOf('BillFileUrl');
       for (let i = 1; i < values.length; i++) {
         if (values[i][0] === body.id) {
+          if (billUrlCol !== -1 && values[i][billUrlCol]) {
+            deleteBillFileByUrl_(values[i][billUrlCol]);
+          }
           s.deleteRow(i + 1);
           break;
         }
