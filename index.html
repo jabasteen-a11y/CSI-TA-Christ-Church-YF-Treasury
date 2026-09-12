@@ -185,12 +185,23 @@
   .statement-table th:nth-child(3), .statement-table td:nth-child(3){border-right:2px solid var(--line);}
   .statement-table tfoot td{font-family:'IBM Plex Mono',monospace;}
 
+  .print-bills{display:none;}
+
   @media print{
     .spine, .page-head .balance-card, .no-print, .logout-link, #current-user-label { display:none !important; }
     .app{display:block;}
     .main{padding:0;max-width:100%;}
     body{background:#fff;}
     .panel{border:none;box-shadow:none;padding:8px 0;}
+
+    .print-bills{display:block;}
+    .bill-page{page-break-before:always;padding-top:14px;}
+    .bill-page .bill-meta{
+      font-family:'IBM Plex Sans',sans-serif;font-size:0.85rem;text-align:center;
+      color:var(--ink-soft);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line);
+    }
+    .bill-page img{display:block;max-width:100%;max-height:23cm;margin:0 auto;}
+    .bill-page .bill-missing{text-align:center;color:var(--muted);font-size:0.85rem;padding:30px 0;}
   }
 
   @media (max-width:800px){
@@ -585,6 +596,8 @@
             </tfoot>
           </table>
         </div>
+
+        <div class="print-bills" id="print-bills"></div>
       </div>
     </section>
 
@@ -1217,6 +1230,43 @@ async function renderEventDetail() {
   }
 
   renderStatementPreview(ev, entries);
+  renderPrintBills(entries);
+}
+
+/* ---------- Bills appendix (one bill per printed page) ---------- */
+function extractDriveFileId_(url) {
+  const match = String(url || '').match(/[-\w]{25,}/);
+  return match ? match[0] : '';
+}
+
+function renderPrintBills(entries) {
+  const container = document.getElementById('print-bills');
+  if (!container) return;
+
+  const billed = entries
+    .filter(e => e.Type === 'Expense' && e.BillFileUrl)
+    .sort((a, b) => new Date(a.Date) - new Date(b.Date));
+
+  if (billed.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = billed.map(e => {
+    const fileId = extractDriveFileId_(e.BillFileUrl);
+    // Drive's thumbnail endpoint renders a full-size preview image for both
+    // image files and PDFs (first page), so one <img> tag covers either case.
+    const previewUrl = fileId ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000` : '';
+    const meta = `${formatDate(e.Date)} — ${e.Description || 'Expense'} — ₹ ${Number(e.Amount || 0).toLocaleString('en-IN')}`;
+    return `
+      <div class="bill-page">
+        <div class="bill-meta">Bill · ${meta}</div>
+        ${previewUrl
+          ? `<img src="${previewUrl}" alt="Bill for ${e.Description || ''}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'bill-missing',innerHTML:'Preview unavailable — <a href=&quot;${e.BillFileUrl}&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;>open bill in Drive</a>'}));">`
+          : `<div class="bill-missing">Preview unavailable — <a href="${e.BillFileUrl}" target="_blank" rel="noopener">open bill in Drive</a></div>`}
+      </div>
+    `;
+  }).join('');
 }
 
 /* ---------- Statement (Receipts & Payments style, always balanced) ---------- */
